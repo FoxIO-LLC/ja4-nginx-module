@@ -1,0 +1,49 @@
+# Use Alpine Linux as the base image
+FROM alpine
+
+# Install dependencies for building Nginx
+RUN apk add --no-cache \
+    gcc \
+    libc-dev \
+    make \
+    openssl-dev \
+    pcre-dev \
+    zlib-dev \
+    wget \
+    patch
+
+# custom user for nginx
+RUN adduser -D dswebuser
+
+# Set working directory
+WORKDIR /tmp
+
+# Download and unpack Nginx source
+RUN wget https://nginx.org/download/nginx-1.25.0.tar.gz && \
+    tar -zxvf nginx-1.25.0.tar.gz
+
+# copy patch file to container
+COPY ./darksail_mod.patch /tmp
+
+# apply the patch to nginx source
+WORKDIR /tmp/nginx-1.25.0
+RUN patch -p1 < /tmp/darksail_mod.patch
+
+# copy over the module source
+COPY ./module /tmp/nginx-1.25.0/module
+# Build Nginx
+# RUN ./configure --with-http_ssl_module && \
+RUN ./configure --with-debug --with-compat --add-module=/tmp/nginx-1.25.0/module --with-http_ssl_module && \
+    make && \
+    make install
+
+# Cleanup
+WORKDIR /
+RUN rm -rf /tmp/nginx-1.25.0 /tmp/nginx-1.25.0.tar.gz
+
+# Redirect Nginx logs to stdout and stderr
+RUN ln -sf /dev/stdout /usr/local/nginx/logs/access.log \
+    && ln -sf /dev/stderr /usr/local/nginx/logs/error.log
+
+# CMD directive to run Nginx in the foreground
+CMD ["/usr/local/nginx/sbin/nginx", "-g", "daemon off;"]
