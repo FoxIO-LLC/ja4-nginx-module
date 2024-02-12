@@ -1,7 +1,5 @@
-# Use Alpine Linux as the base image
 FROM alpine
 
-# Install dependencies for building Nginx
 RUN apk add --no-cache \
     gcc \
     libc-dev \
@@ -12,34 +10,38 @@ RUN apk add --no-cache \
     wget \
     patch
 
-# custom user for nginx
+# TODO: INSTALL MOD-SECURITY LIB
+
 RUN adduser -D dswebuser
 
-# Set working directory
 WORKDIR /tmp
 
-# Download and unpack Nginx source
+# INSTALL NGINX
 RUN wget https://nginx.org/download/nginx-1.25.0.tar.gz && \
     tar -zxvf nginx-1.25.0.tar.gz
 
-# copy patch file to container
-COPY ./darksail_mod.patch /tmp
-
-# apply the patch to nginx source
 WORKDIR /tmp/nginx-1.25.0
-RUN patch -p1 < /tmp/darksail_mod.patch
 
-# copy over the module source
-COPY ./module /tmp/nginx-1.25.0/module
+# INSTALL JA4
+RUN wget https://github.com/FoxIO-LLC/ja4-plus-nginx/releases/download/v0.2.1-alpha/nginx.patch
+RUN patch -p1 < nginx.patch
+
+RUN wget https://github.com/FoxIO-LLC/ja4-plus-nginx/releases/download/v0.2.0-alpha/ja4-plus-nginx-v0.1.0-alpha.tar.gz && \
+    tar -zxvf ja4-plus-nginx-v0.1.0-alpha.tar.gz
+
+# TODO: INSTALL MOD-SECURITY MODULE
+
+
 # Build Nginx
-# RUN ./configure --with-http_ssl_module && \
-RUN ./configure --with-debug --with-compat --add-module=/tmp/nginx-1.25.0/module --with-http_ssl_module && \
+RUN ./configure --with-debug --with-compat --add-module=/tmp/nginx-1.25.0/ja4-plus-nginx-v0.1.0-alpha/src --with-http_ssl_module && \
     make && \
     make install
 
 # Cleanup
 WORKDIR /
 RUN rm -rf /tmp/nginx-1.25.0 /tmp/nginx-1.25.0.tar.gz
+RUN rm -rf /tmp/ja4-plus-nginx-v0.1.0-alpha /tmp/ja4-plus-nginx-v0.1.0-alpha.tar.gz
+
 
 # Redirect Nginx logs to stdout and stderr
 RUN ln -sf /dev/stdout /usr/local/nginx/logs/access.log \

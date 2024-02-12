@@ -4,14 +4,65 @@
 #include <ngx_log.h>
 #include <ngx_md5.h>
 #include <openssl/sha.h>
-#include <stdint.h> 
+#include <stdint.h>
 #include "ngx_http_ssl_ja4_module.h"
 
+static ngx_http_variable_t ngx_http_ssl_ja4_variables_list[] = {
 
-// FUNCTION HEADER DECLARATIONS
+    {ngx_string("http_ssl_ja4"),
+     NULL,
+     ngx_http_ssl_ja4,
+     0, 0, 0},
+    {ngx_string("http_ssl_ja4_string"),
+     NULL,
+     ngx_http_ssl_ja4_string,
+     0, 0, 0},
+    {ngx_string("http_ssl_ja4s"),
+     NULL,
+     ngx_http_ssl_ja4s,
+     0, 0, 0},
+    {ngx_string("http_ssl_ja4s_string"),
+     NULL,
+     ngx_http_ssl_ja4s_string,
+     0, 0, 0},
+    {ngx_string("http_ssl_ja4h"),
+     NULL,
+     ngx_http_ssl_ja4h,
+     0, 0, 0},
+    {ngx_string("http_ssl_ja4h_string"),
+     NULL,
+     ngx_http_ssl_ja4h_string,
+     0, 0, 0},
+    {ngx_string("http_ssl_ja4t"),
+     NULL,
+     ngx_http_ssl_ja4t,
+     0, 0, 0},
+    {ngx_string("http_ssl_ja4t_string"),
+     NULL,
+     ngx_http_ssl_ja4t_string,
+     0, 0, 0},
+    {ngx_string("http_ssl_ja4ts"),
+     NULL,
+     ngx_http_ssl_ja4ts,
+     0, 0, 0},
+    {ngx_string("http_ssl_ja4ts_string"),
+     NULL,
+     ngx_http_ssl_ja4ts_string,
+     0, 0, 0},
+    {ngx_string("http_ssl_ja4l"),
+     NULL,
+     ngx_http_ssl_ja4l,
+     0, 0, 0},
+    {ngx_string("https_ssl_ja4x"),
+     NULL,
+     ngx_http_ssl_ja4x,
+     0, 0, 0},
+    {ngx_string("https_ssl_ja4x_string"),
+     NULL,
+     ngx_http_ssl_ja4x_string,
+     0, 0, 0},
 
-
-
+};
 
 // FUNCTIONS
 
@@ -104,12 +155,9 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         ja4->version = "13";
         break;
     default:
-        ja4->version = "XX"; // Represents an unknown version
+        ja4->version = "XX"; // unknown version
         break;
     }
-
-    // get sig
-    // add to ja4 obj
 
     /* Cipher suites */
     ja4->ciphers = NULL;
@@ -135,7 +183,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         /* Filter out GREASE extensions */
         for (i = 0; i < c->ssl->ciphers_sz; ++i)
         {
-            // convert sipher from network byte order to host byte order
+            // convert cipher from network byte order to host byte order
             us = ntohs(c->ssl->ciphers[i]);
             // if not a grease value, add it to the list of ciphers
             if (!ngx_ssl_ja4_is_ext_greased(us))
@@ -477,9 +525,9 @@ int ngx_ssl_ja4s(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4s_t *ja4s)
 {
     // this function sets stuff on the ja4s struct so the fingerprint can easily, and clearly be formed in a separate function
     SSL *ssl;
-    size_t i;
-    size_t len = 0;
-    unsigned short us = 0;
+    // size_t i;
+    // size_t len = 0;
+    // unsigned short us = 0;
 
     if (!c->ssl)
     {
@@ -563,15 +611,7 @@ void ngx_ssl_ja4s_fp_string(ngx_pool_t *pool, ngx_ssl_ja4s_t *ja4, ngx_str_t *ou
     // instead, it just comma separates them
 
     // Estimate memory requirements for output
-    size_t len = 1                        // for q/t
-                 + 2                      // TLS version
-                 + 1                      // d/i for SNI
-                 + 2                      // count of ciphers
-                 + 2                      // count of extensions
-                 + ja4->ciphers_sz * 6    // ciphers and commas
-                 + ja4->extensions_sz * 6 // extensions and commas
-                 + 2                      // first and last characters of ALPN
-                 + 4;                     // separators
+    size_t len = 1;
 
     out->data = ngx_pnalloc(pool, len);
     if (out->data == NULL)
@@ -580,17 +620,102 @@ void ngx_ssl_ja4s_fp_string(ngx_pool_t *pool, ngx_ssl_ja4s_t *ja4, ngx_str_t *ou
         return;
     }
 
-    size_t cur = 0;
+    // size_t cur = 0;
 }
+
+// JA4X
+int ngx_ssl_ja4x(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4x_t *ja4x)
+{
+    // this function sets stuff on the ja4x struct so the fingerprint can easily, and clearly be formed in a separate function
+    SSL *ssl;
+    // size_t i;
+    // size_t len = 0;
+    // unsigned short us = 0;
+
+    if (!c->ssl)
+    {
+        return NGX_DECLINED;
+    }
+
+    if (!c->ssl->handshaked)
+    {
+        return NGX_DECLINED;
+    }
+
+    ssl = c->ssl->connection;
+    if (!ssl)
+    {
+        return NGX_DECLINED;
+    }
+    return NGX_OK;
+}
+static ngx_int_t
+ngx_http_ssl_ja4x(ngx_http_request_t *r,
+                  ngx_http_variable_value_t *v, uintptr_t data)
+{
+    ngx_ssl_ja4x_t ja4x;
+    ngx_str_t fp = ngx_null_string;
+
+    if (r->connection == NULL)
+    {
+        return NGX_OK;
+    }
+
+    if (ngx_ssl_ja4x(r->connection, r->pool, &ja4x) == NGX_DECLINED)
+    {
+        return NGX_ERROR;
+    }
+
+    ngx_ssl_ja4x_fp(r->pool, &ja4x, &fp);
+
+    v->data = fp.data;
+    v->len = fp.len;
+    v->valid = 1;
+    v->no_cacheable = 1;
+    v->not_found = 0;
+
+    return NGX_OK;
+}
+void ngx_ssl_ja4x_fp(ngx_pool_t *pool, ngx_ssl_ja4x_t *ja4x, ngx_str_t *out) {}
+
+// JA4X STRING
+static ngx_int_t
+ngx_http_ssl_ja4x_string(ngx_http_request_t *r,
+                         ngx_http_variable_value_t *v, uintptr_t data)
+{
+    ngx_ssl_ja4x_t ja4x;
+    ngx_str_t fp = ngx_null_string;
+
+    if (r->connection == NULL)
+    {
+        return NGX_OK;
+    }
+
+    if (ngx_ssl_ja4x(r->connection, r->pool, &ja4x) == NGX_DECLINED)
+    {
+        return NGX_ERROR;
+    }
+
+    ngx_ssl_ja4x_fp_string(r->pool, &ja4x, &fp);
+
+    v->data = fp.data;
+    v->len = fp.len;
+    v->valid = 1;
+    v->no_cacheable = 1;
+    v->not_found = 0;
+
+    return NGX_OK;
+}
+void ngx_ssl_ja4x_fp_string(ngx_pool_t *pool, ngx_ssl_ja4x_t *ja4x, ngx_str_t *out) {}
 
 // JA4H
 int ngx_ssl_ja4h(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h)
 {
     // this function sets stuff on the ja4s struct so the fingerprint can easily, and clearly be formed in a separate function
     SSL *ssl;
-    size_t i;
-    size_t len = 0;
-    unsigned short us = 0;
+    // size_t i;
+    // size_t len = 0;
+    // unsigned short us = 0;
 
     if (!c->ssl)
     {
@@ -673,9 +798,9 @@ int ngx_ssl_ja4t(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4t_t *ja4t)
 {
     // this function sets stuff on the ja4s struct so the fingerprint can easily, and clearly be formed in a separate function
     SSL *ssl;
-    size_t i;
-    size_t len = 0;
-    unsigned short us = 0;
+    // size_t i;
+    // size_t len = 0;
+    // unsigned short us = 0;
 
     if (!c->ssl)
     {
@@ -754,13 +879,13 @@ ngx_http_ssl_ja4t_string(ngx_http_request_t *r,
 void ngx_ssl_ja4t_fp_string(ngx_pool_t *pool, ngx_ssl_ja4t_t *ja4t, ngx_str_t *out) {}
 
 // JA4TS
-int ngx_ssl_ja4t(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4t_t *ja4t)
+int ngx_ssl_ja4ts(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4ts_t *ja4ts)
 {
     // this function sets stuff on the ja4s struct so the fingerprint can easily, and clearly be formed in a separate function
     SSL *ssl;
-    size_t i;
-    size_t len = 0;
-    unsigned short us = 0;
+    // size_t i;
+    // size_t len = 0;
+    // unsigned short us = 0;
 
     if (!c->ssl)
     {
@@ -780,8 +905,8 @@ int ngx_ssl_ja4t(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4t_t *ja4t)
     return NGX_OK;
 }
 static ngx_int_t
-ngx_http_ssl_ja4t(ngx_http_request_t *r,
-                  ngx_http_variable_value_t *v, uintptr_t data)
+ngx_http_ssl_ja4ts(ngx_http_request_t *r,
+                   ngx_http_variable_value_t *v, uintptr_t data)
 {
     ngx_ssl_ja4t_t ja4t;
     ngx_str_t fp = ngx_null_string;
@@ -806,7 +931,7 @@ ngx_http_ssl_ja4t(ngx_http_request_t *r,
 
     return NGX_OK;
 }
-void ngx_ssl_ja4t_fp(ngx_pool_t *pool, ngx_ssl_ja4t_t *ja4t, ngx_str_t *out) {}
+void ngx_ssl_ja4ts_fp(ngx_pool_t *pool, ngx_ssl_ja4ts_t *ja4ts, ngx_str_t *out) {}
 
 // JA4TS STRING
 static ngx_int_t
@@ -1051,4 +1176,3 @@ ngx_module_t ngx_http_ssl_ja4_module = {
     NULL,                         /* exit process */
     NULL,                         /* exit master */
     NGX_MODULE_V1_PADDING};
-

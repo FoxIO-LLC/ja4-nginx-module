@@ -1,0 +1,145 @@
+diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
+index 8468101d..cb58c450 100644
+--- a/src/event/ngx_event_openssl.c
++++ b/src/event/ngx_event_openssl.c
+@@ -1792,6 +1792,88 @@ ngx_ssl_set_session(ngx_connection_t *c, ngx_ssl_session_t *session)
+     return NGX_OK;
+ }
+ 
++// TODO: adds ja4 stuff to the ssl object to be calculated later
++void
++ngx_SSL_client_features(ngx_connection_t *c) {
++
++    unsigned short                *ciphers_out = NULL;
++    size_t                         len = 0;
++    SSL                           *s = NULL;
++
++    if (c == NULL) {
++        return;
++    }
++    s = c->ssl->connection;
++
++    /* Cipher suites */
++    c->ssl->ciphers = NULL;
++    c->ssl->ciphers_sz = SSL_get0_raw_cipherlist(s, &ciphers_out);
++    c->ssl->ciphers_sz /= 2;
++
++    if (c->ssl->ciphers_sz && ciphers_out) {
++        len = c->ssl->ciphers_sz * sizeof(unsigned short);
++        c->ssl->ciphers = ngx_pnalloc(c->pool, len);
++        ngx_memcpy(c->ssl->ciphers, ciphers_out, len);
++    }
++}
++// TODO: this is the extensions part need to check this ja4 extension hack
++int
++ngx_SSL_early_cb_fn(SSL *s, int *al, void *arg) {
++
++    int                            got_extensions;
++    int                           *ext_out;
++    size_t                         ext_len;
++    ngx_connection_t              *c;
++
++    c = arg;
++
++    if (c == NULL) {
++        return 1;
++    }
++
++    if (c->ssl == NULL) {
++        return 1;
++    }
++
++    c->ssl->extensions_sz = 0;
++    c->ssl->extensions = NULL;
++    got_extensions = SSL_client_hello_get1_extensions_present(s,
++                                                       &ext_out,
++                                                       &ext_len);
++
++    // log extensions
++    for (size_t i = 0; i < ext_len; i++) {
++        ngx_log_debug2(NGX_LOG_DEBUG_EVENT, c->log, 0, "ext_out[%z] = %d", i, ext_out[i]);
++    }
++
++    if (!got_extensions) {
++        return 1;
++    }
++    if (!ext_out) {
++        return 1;
++    }
++    if (!ext_len) {
++        return 1;
++    }
++
++    c->ssl->extensions = ngx_palloc(c->pool, sizeof(unsigned short) * ext_len);
++    if (c->ssl->extensions != NULL) {
++        for (size_t i = 0; i < ext_len; i++) {
++            c->ssl->extensions[i] = (unsigned short) ext_out[i];
++        }
++        c->ssl->extensions_sz = ext_len;
++    }
++
++    // now log c->ssl->extensions
++    for (size_t i = 0; i < ext_len; i++) {
++        ngx_log_debug2(NGX_LOG_DEBUG_EVENT, c->log, 0, "c->ssl->extensions[%z] = %d", i, c->ssl->extensions[i]);
++    }
++
++    OPENSSL_free(ext_out);
++
++    return 1;
++}
++
+ 
+ ngx_int_t
+ ngx_ssl_handshake(ngx_connection_t *c)
+@@ -1811,9 +1893,15 @@ ngx_ssl_handshake(ngx_connection_t *c)
+     }
+ 
+     ngx_ssl_clear_error(c->log);
++    
++    // client hello callback function on the session context
++    SSL_CTX_set_client_hello_cb(c->ssl->session_ctx, ngx_SSL_early_cb_fn, c);   
+ 
+     n = SSL_do_handshake(c->ssl->connection);
+ 
++    // calculate ja4 stuff
++    ngx_SSL_client_features(c);
++
+     ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0, "SSL_do_handshake: %d", n);
+ 
+     if (n == 1) {
+diff --git a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl.h
+index c062f912..7eafe35b 100644
+--- a/src/event/ngx_event_openssl.h
++++ b/src/event/ngx_event_openssl.h
+@@ -128,6 +128,19 @@ struct ngx_ssl_connection_s {
+     unsigned                    in_ocsp:1;
+     unsigned                    early_preread:1;
+     unsigned                    write_blocked:1;
++
++    // ja4 stuff
++    int             version;
++
++    size_t          ciphers_sz;
++    unsigned short *ciphers;
++
++    size_t          extensions_sz;
++    unsigned short *extensions;
++
++    // ja4l stuff
++    uint16_t handshake_roundtrip_microseconds; // a whole number - max is probably thousands
++    uint8_t ttl;                // time to live - a whole number - max is 255
+ };
+ 
+ 
+diff --git a/src/http/modules/ngx_http_ssl_module.c b/src/http/modules/ngx_http_ssl_module.c
+index 1c92d9fa..d51abb5d 100644
+--- a/src/http/modules/ngx_http_ssl_module.c
++++ b/src/http/modules/ngx_http_ssl_module.c
+@@ -434,6 +434,7 @@ ngx_http_ssl_alpn_select(ngx_ssl_conn_t *ssl_conn, const unsigned char **out,
+ #endif
+ 
+ #if (NGX_DEBUG)
++    // TODO: here lies ALPN secrete we need to update algorithm w/
+     for (i = 0; i < inlen; i += in[i] + 1) {
+         ngx_log_debug2(NGX_LOG_DEBUG_HTTP, c->log, 0,
+                        "SSL ALPN supported by client: %*s",
