@@ -1,12 +1,12 @@
-diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
-index 8468101d..cb58c450 100644
---- a/src/event/ngx_event_openssl.c
-+++ b/src/event/ngx_event_openssl.c
-@@ -1792,6 +1792,88 @@ ngx_ssl_set_session(ngx_connection_t *c, ngx_ssl_session_t *session)
+diff --git a/../nginx/src/event/ngx_event_openssl.c b/./src/event/ngx_event_openssl.c
+index 89f277fe5..67f57cc28 100644
+--- a/../nginx/src/event/ngx_event_openssl.c
++++ b/./src/event/ngx_event_openssl.c
+@@ -1793,6 +1793,88 @@ ngx_ssl_set_session(ngx_connection_t *c, ngx_ssl_session_t *session)
      return NGX_OK;
  }
  
-+// TODO: adds ja4 stuff to the ssl object to be calculated later
++// adds ciphers to the ssl object for ja4 fingerprint
 +void
 +ngx_SSL_client_features(ngx_connection_t *c) {
 +
@@ -30,7 +30,7 @@ index 8468101d..cb58c450 100644
 +        ngx_memcpy(c->ssl->ciphers, ciphers_out, len);
 +    }
 +}
-+// TODO: this is the extensions part need to check this ja4 extension hack
++// adds extensions to the ssl object for ja4 fingerprint
 +int
 +ngx_SSL_early_cb_fn(SSL *s, int *al, void *arg) {
 +
@@ -91,26 +91,27 @@ index 8468101d..cb58c450 100644
  
  ngx_int_t
  ngx_ssl_handshake(ngx_connection_t *c)
-@@ -1811,9 +1893,15 @@ ngx_ssl_handshake(ngx_connection_t *c)
+@@ -1812,9 +1894,15 @@ ngx_ssl_handshake(ngx_connection_t *c)
      }
  
      ngx_ssl_clear_error(c->log);
+-
 +    
-+    // client hello callback function on the session context
++    // client hello callback function on the session context, ja4 extensions
 +    SSL_CTX_set_client_hello_cb(c->ssl->session_ctx, ngx_SSL_early_cb_fn, c);   
- 
++    
      n = SSL_do_handshake(c->ssl->connection);
  
-+    // calculate ja4 stuff
++    // ja4 cipher suites
 +    ngx_SSL_client_features(c);
 +
      ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0, "SSL_do_handshake: %d", n);
  
      if (n == 1) {
-diff --git a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl.h
-index c062f912..7eafe35b 100644
---- a/src/event/ngx_event_openssl.h
-+++ b/src/event/ngx_event_openssl.h
+diff --git a/../nginx/src/event/ngx_event_openssl.h b/./src/event/ngx_event_openssl.h
+index ebb2c35bf..599d00507 100644
+--- a/../nginx/src/event/ngx_event_openssl.h
++++ b/./src/event/ngx_event_openssl.h
 @@ -128,6 +128,19 @@ struct ngx_ssl_connection_s {
      unsigned                    in_ocsp:1;
      unsigned                    early_preread:1;
@@ -131,10 +132,10 @@ index c062f912..7eafe35b 100644
  };
  
  
-diff --git a/src/http/modules/ngx_http_ssl_module.c b/src/http/modules/ngx_http_ssl_module.c
-index 1c92d9fa..d51abb5d 100644
---- a/src/http/modules/ngx_http_ssl_module.c
-+++ b/src/http/modules/ngx_http_ssl_module.c
+diff --git a/../nginx/src/http/modules/ngx_http_ssl_module.c b/./src/http/modules/ngx_http_ssl_module.c
+index 1c92d9fa8..d51abb5d0 100644
+--- a/../nginx/src/http/modules/ngx_http_ssl_module.c
++++ b/./src/http/modules/ngx_http_ssl_module.c
 @@ -434,6 +434,7 @@ ngx_http_ssl_alpn_select(ngx_ssl_conn_t *ssl_conn, const unsigned char **out,
  #endif
  
