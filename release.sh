@@ -1,8 +1,8 @@
 #!/bin/bash
 
 VERSION=$(git tag -l --sort=-v:refname | head -n 1)
-DIR_NAME="ja4-plus-nginx-$VERSION"
-TAR_NAME="ja4-plus-nginx-$VERSION.tar.gz"
+DIR_NAME="ja4-nginx-module-$VERSION"
+TAR_NAME="ja4-nginx-module-$VERSION.tar.gz"
 
 MY_DIR=${PWD##*/}
 

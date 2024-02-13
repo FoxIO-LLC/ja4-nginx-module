@@ -1,7 +1,8 @@
-# Use Alpine Linux as the base image
 FROM alpine
 
-# Install dependencies for building Nginx
+# Define the version as a build argument for easy updates
+ARG VERSION=v0.1.0-alpha
+ARG NGINX_VERSION=1.25.0
 RUN apk add --no-cache \
     gcc \
     libc-dev \
@@ -12,38 +13,37 @@ RUN apk add --no-cache \
     wget \
     patch
 
-# custom user for nginx
 RUN adduser -D dswebuser
 
-# Set working directory
 WORKDIR /tmp
 
-# Download and unpack Nginx source
-RUN wget https://nginx.org/download/nginx-1.25.0.tar.gz && \
-    tar -zxvf nginx-1.25.0.tar.gz
+# INSTALL NGINX
+RUN wget https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz && \
+    tar -zxvf nginx-${NGINX_VERSION}.tar.gz
 
-# copy patch file to container
-COPY ./darksail_mod.patch /tmp
+WORKDIR /tmp/nginx-${NGINX_VERSION}
 
-# apply the patch to nginx source
-WORKDIR /tmp/nginx-1.25.0
-RUN patch -p1 < /tmp/darksail_mod.patch
+# JA4 patch - assumes patch name doesn't include version, adjust if it does
+RUN wget https://github.com/FoxIO-LLC/ja4-nginx-module/releases/download/${VERSION}/nginx.patch && \
+    patch -p1 < nginx.patch
 
-# copy over the module source
-COPY ./module /tmp/nginx-1.25.0/module
+# JA4 module
+RUN wget https://github.com/FoxIO-LLC/ja4-nginx-module/releases/download/${VERSION}/ja4-nginx-module-${VERSION}.tar.gz && \
+    tar -zxvf ja4-nginx-module-${VERSION}.tar.gz
+
 # Build Nginx
-# RUN ./configure --with-http_ssl_module && \
-RUN ./configure --with-debug --with-compat --add-module=/tmp/nginx-1.25.0/module --with-http_ssl_module --with-http_v3_module && \
+# Assumes the extracted directory name matches the tarball's root directory name, adjust if necessary
+RUN ./configure --with-debug --with-compat --add-module=/tmp/nginx-${NGINX_VERSION}/ja4-nginx-module-${VERSION}/src --with-http_ssl_module && \
     make && \
     make install
 
 # Cleanup
 WORKDIR /
-RUN rm -rf /tmp/nginx-1.25.0 /tmp/nginx-1.25.0.tar.gz
+RUN rm -rf /tmp/
 
-# Redirect Nginx logs to stdout and stderr
-RUN ln -sf /dev/stdout /usr/local/nginx/logs/access.log \
-    && ln -sf /dev/stderr /usr/local/nginx/logs/error.log
+# Link Nginx logs to stdout and stderr
+RUN ln -sf /dev/stdout /usr/local/nginx/logs/access.log && \
+    ln -sf /dev/stderr /usr/local/nginx/logs/error.log
 
 # CMD directive to run Nginx in the foreground
 CMD ["/usr/local/nginx/sbin/nginx", "-g", "daemon off;"]
