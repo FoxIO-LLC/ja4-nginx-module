@@ -23,16 +23,14 @@ RUN wget https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz && \
 
 WORKDIR /tmp/nginx-${NGINX_VERSION}
 
-# JA4 patch - assumes patch name doesn't include version, adjust if it does
-RUN wget https://github.com/FoxIO-LLC/ja4-nginx-module/releases/download/${VERSION}/nginx.patch && \
-    patch -p1 < nginx.patch
-
 # JA4 module
 RUN wget https://github.com/FoxIO-LLC/ja4-nginx-module/releases/download/${VERSION}/ja4-nginx-module-${VERSION}.tar.gz && \
     tar -zxvf ja4-nginx-module-${VERSION}.tar.gz
 
+# patch nginx core
+RUN patch -p1 < ja4-nginx-module-${VERSION}/patches/nginx.patch
+
 # Build Nginx
-# Assumes the extracted directory name matches the tarball's root directory name, adjust if necessary
 RUN ./configure --with-debug --with-compat --add-module=/tmp/nginx-${NGINX_VERSION}/ja4-nginx-module-${VERSION}/src --with-http_ssl_module && \
     make && \
     make install
