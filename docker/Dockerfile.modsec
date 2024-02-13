@@ -10,6 +10,8 @@ RUN apk add --no-cache \
     wget \
     patch
 
+# TODO: INSTALL MOD-SECURITY LIB
+
 RUN adduser -D dswebuser
 
 WORKDIR /tmp
@@ -26,6 +28,9 @@ RUN patch -p1 < nginx.patch
 
 RUN wget https://github.com/FoxIO-LLC/ja4-plus-nginx/releases/download/v0.2.0-alpha/ja4-plus-nginx-v0.1.0-alpha.tar.gz && \
     tar -zxvf ja4-plus-nginx-v0.1.0-alpha.tar.gz
+
+# TODO: INSTALL MOD-SECURITY MODULE
+
 
 # Build Nginx
 RUN ./configure --with-debug --with-compat --add-module=/tmp/nginx-1.25.0/ja4-plus-nginx-v0.1.0-alpha/src --with-http_ssl_module && \
