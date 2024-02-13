@@ -1,3 +1,5 @@
+# this is a reference file for how to use the image hosted on GitHub Container Registry
+
 version: "3.8"
 services:
   nginx-custom:

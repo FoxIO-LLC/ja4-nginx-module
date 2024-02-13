@@ -20,7 +20,7 @@ To debug the container while developing, run docker with `--progress=plain --no-
 
 1. Tag the release
 `git tag -a vx.y.z-alpha -m "Release version x.y.z"`
-2. Run scipt
+2. Run script
 `./release.sh`
 3. Push tag to GitHub
 `git push origin vx.y.z`
