@@ -1,47 +1,79 @@
 FROM alpine
 
-# Define the version as a build argument for easy updates
+# Define the versions as a build argument for easy updates
 ARG VERSION=v0.1.0-alpha
 ARG NGINX_VERSION=1.25.0
+ARG MODSECURITY_VERSION=v3.0.6
+ARG MODSECURITY_NGINX_VERSION=v1.0.3
+
+# Install build dependencies
 RUN apk add --no-cache \
     gcc \
+    g++ \
     libc-dev \
     make \
     openssl-dev \
     pcre-dev \
     zlib-dev \
+    linux-headers \
     wget \
+    git \
+    autoconf \
+    automake \
+    libtool \
+    curl-dev \
+    libxml2-dev \
+    pcre-dev \
+    yajl-dev \
+    geoip-dev \
     patch
 
 RUN adduser -D dswebuser
 
 WORKDIR /tmp
 
-# INSTALL NGINX
+# Clone and build ModSecurity library
+RUN git clone --depth 1 -b ${MODSECURITY_VERSION} https://github.com/SpiderLabs/ModSecurity.git modsecurity && \
+    cd modsecurity && \
+    git submodule init && \
+    git submodule update && \
+    ./build.sh && \
+    ./configure && \
+    make && \
+    make install
+
+# Download and extract Nginx
 RUN wget https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz && \
     tar -zxvf nginx-${NGINX_VERSION}.tar.gz
 
-WORKDIR /tmp/nginx-${NGINX_VERSION}
-
-# JA4 module
+# Download and extract JA4 module
 RUN wget https://github.com/FoxIO-LLC/ja4-nginx-module/releases/download/${VERSION}/ja4-nginx-module-${VERSION}.tar.gz && \
     tar -zxvf ja4-nginx-module-${VERSION}.tar.gz
 
-# patch nginx core
-RUN patch -p1 < ja4-nginx-module-${VERSION}/patches/nginx.patch
+# Patch Nginx core for JA4 module
+WORKDIR /tmp/nginx-${NGINX_VERSION}
+RUN patch -p1 < ../ja4-nginx-module-${VERSION}/patches/nginx.patch
 
-# Build Nginx
-RUN ./configure --with-debug --with-compat --add-module=/tmp/nginx-${NGINX_VERSION}/ja4-nginx-module-${VERSION}/src --with-http_ssl_module && \
+# Download and extract ModSecurity Nginx connector
+RUN wget https://github.com/owasp-modsecurity/ModSecurity-nginx/releases/download/${MODSECURITY_NGINX_VERSION}/modsecurity-nginx-${MODSECURITY_NGINX_VERSION}.tar.gz && \
+    tar -zxvf modsecurity-nginx-${MODSECURITY_NGINX_VERSION}.tar.gz
+
+# Build Nginx with JA4 module and ModSecurity Nginx connector
+RUN ./configure --with-debug --with-compat \
+    --add-module=/tmp/ja4-nginx-module-${VERSION} \
+    --add-module=/tmp/modsecurity-nginx-${MODSECURITY_NGINX_VERSION} \
+    --with-http_ssl_module \
+    --prefix=/etc/nginx && \
     make && \
     make install
 
 # Cleanup
 WORKDIR /
-RUN rm -rf /tmp/
+RUN rm -rf /tmp/*
 
 # Link Nginx logs to stdout and stderr
-RUN ln -sf /dev/stdout /usr/local/nginx/logs/access.log && \
-    ln -sf /dev/stderr /usr/local/nginx/logs/error.log
+RUN ln -sf /dev/stdout /etc/nginx/logs/access.log && \
+    ln -sf /dev/stderr /etc/nginx/logs/error.log
 
 # CMD directive to run Nginx in the foreground
-CMD ["/usr/local/nginx/sbin/nginx", "-g", "daemon off;"]
+CMD ["/etc/nginx/sbin/nginx", "-g", "daemon off;"]
