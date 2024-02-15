@@ -31,7 +31,7 @@ RUN wget https://github.com/FoxIO-LLC/ja4-nginx-module/releases/download/${VERSI
 RUN patch -p1 < ja4-nginx-module-${VERSION}/patches/nginx.patch
 
 # Build Nginx
-RUN ./configure --with-debug --with-compat --add-module=/tmp/nginx-${NGINX_VERSION}/ja4-nginx-module-${VERSION}/src --with-http_ssl_module && \
+RUN ./configure --with-debug --with-compat --add-module=/tmp/nginx-${NGINX_VERSION}/ja4-nginx-module-${VERSION}/src --with-http_ssl_module --prefix=/etc/nginx && \
     make && \
     make install
 
@@ -40,8 +40,8 @@ WORKDIR /
 RUN rm -rf /tmp/
 
 # Link Nginx logs to stdout and stderr
-RUN ln -sf /dev/stdout /usr/local/nginx/logs/access.log && \
-    ln -sf /dev/stderr /usr/local/nginx/logs/error.log
+RUN ln -sf /dev/stdout /etc/nginx/logs/access.log && \
+    ln -sf /dev/stderr /etc/nginx/logs/error.log
 
 # CMD directive to run Nginx in the foreground
-CMD ["/usr/local/nginx/sbin/nginx", "-g", "daemon off;"]
+CMD ["/etc/nginx/sbin/nginx", "-g", "daemon off;"]

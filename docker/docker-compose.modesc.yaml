@@ -1,9 +1,9 @@
 version: "3.8"
 services:
-  ja4-nginx:
+  ja4-nginx-modsec:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.modsec
     ports:
       - "80:80"
       - "443:443"
