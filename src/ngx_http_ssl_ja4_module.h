@@ -17,6 +17,9 @@ typedef struct ngx_ssl_ja4_s
     size_t extensions_sz;       // Count of extensions
     unsigned short *extensions; // List of extensions
 
+    size_t sigalgs_sz;       // Count of signature algorithms
+    char **sigalgs; // List of signature algorithms
+
     // For the entire ALPN extension value
     size_t alpn_sz;
     char *alpn_values;
@@ -30,6 +33,7 @@ typedef struct ngx_ssl_ja4_s
 
     char extension_hash[65];           // 32 bytes * 2 characters/byte + 1 for '\0'
     char extension_hash_truncated[13]; // 6 bytes * 2 characters/byte + 1 for '\0'
+
 } ngx_ssl_ja4_t;
 
 typedef struct ngx_ssl_ja4s_s
