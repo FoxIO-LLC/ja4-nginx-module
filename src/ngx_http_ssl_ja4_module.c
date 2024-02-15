@@ -270,6 +270,16 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
             SHA256_Update(&sha256, &(ja4->extensions[i]), sizeof(unsigned short));
         }
 
+        if (ja4->sigalgs_sz)
+        {
+            // add underscore
+            SHA256_Update(&sha256, "_", 1);
+            for (i = 0; i < ja4->sigalgs_sz; i++)
+            {
+                SHA256_Update(&sha256, ja4->sigalgs[i], strlen(ja4->sigalgs[i]));
+            }
+        }
+
         SHA256_Final(hash_result, &sha256);
 
         // Convert the full hash to hexadecimal format
