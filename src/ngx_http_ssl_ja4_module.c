@@ -372,9 +372,22 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
 {
     // this function calculates the ja4 fingerprint but it doesn't hash extensions and ciphers
     // instead, it just comma separates them
-    // TODO: dynamically allocate memory
-    size_t len = 2056; // big enough
 
+    // Initial size calculation
+    // Base size for fixed elements: 't', version (2 chars), has_sni, ciphers_sz (2 chars), extensions_sz (2 chars),
+    // alpn (2 chars), separators ('_' x3), null-terminator
+    size_t len = 1 + 2 + 1 + 2 + 2 + 2 + 3 + 1;
+    // Dynamic size for variable elements: ciphers, extensions, signature algorithms
+    len += (ja4->ciphers_sz * 5) + ja4->ciphers_sz;       // 5 chars per cipher + comma
+    len += (ja4->extensions_sz * 5) + ja4->extensions_sz; // 5 chars per extension + comma
+    for (size_t i = 0; i < ja4->sigalgs_sz; ++i)
+    {
+        len += strlen(ja4->sigalgs[i]) + 1; // strlen of sigalg + comma
+    }
+
+    len += 256; // safety padding
+
+    // Allocate memory based on calculated size
     out->data = ngx_pnalloc(pool, len);
     if (out->data == NULL)
     {
@@ -383,6 +396,15 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     }
 
     size_t cur = 0;
+
+    // Populate the data as before
+    // (The rest of your function remains the same, except you no longer need the initial hardcoded size allocation)
+
+    // Note: The rest of the function logic goes here without change, using `cur` to keep track of the current position
+    // in the allocated buffer and appending each piece of data to `out->data`.
+
+    // Final adjustments as per your original logic
+    out->len = cur;
 
     // t for TCP
     out->data[cur++] = 't';
