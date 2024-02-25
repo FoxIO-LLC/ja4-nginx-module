@@ -2,6 +2,7 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 
+
 // STRUCTS
 typedef struct ngx_ssl_ja4_s
 {
@@ -25,8 +26,7 @@ typedef struct ngx_ssl_ja4_s
     char *alpn_values;
 
     // For the first and last ALPN extension values
-    char alpn_first_value;
-    char alpn_last_value;
+    char* alpn_first_value;
 
     char cipher_hash[65];           // 32 bytes * 2 characters/byte + 1 for '\0'
     char cipher_hash_truncated[13]; // 12 bytes * 2 characters/byte + 1 for '\0'
@@ -125,12 +125,16 @@ typedef struct ngx_ssl_ja4l_s
 } ngx_ssl_ja4l_t;
 
 
+// CONSTANTS
+#define SSL3_VERSION_STR "SSLv3"
+#define TLS1_VERSION_STR "TLSv1"
+#define TLS1_1_VERSION_STR "TLSv1.1"
+#define TLS1_2_VERSION_STR "TLSv1.2"
+#define TLS1_3_VERSION_STR "TLSv1.3"
+#define DTLS1_VERSION_STR "DTLSv1"
+#define DTLS1_2_VERSION_STR "DTLSv1.2"
+#define QUICV1_VERSION_STR "QUICv1"
 
-/**
- * This is a list of Nginx variables that will be registered with Nginx.
- * The `ngx_http_add_variable` function will be used to register each
- * variable in the `ngx_http_ssl_ja4_init` function.
- */
 
 /**
  * Grease values to be ignored.

@@ -7,6 +7,11 @@
 #include <stdint.h>
 #include "ngx_http_ssl_ja4_module.h"
 
+/**
+ * This is a list of Nginx variables that will be registered with Nginx.
+ * The `ngx_http_add_variable` function will be used to register each
+ * variable in the `ngx_http_ssl_ja4_init` function.
+ */
 static ngx_http_variable_t ngx_http_ssl_ja4_variables_list[] = {
 
     {ngx_string("http_ssl_ja4"),
@@ -101,63 +106,40 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     ja4->has_sni = (sni_name != NULL) ? 'd' : 'i';
 
     // 3. Fetch the ALPN value:
-    // the ALPN value could be many things according to spec: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
-    // for example "http/1.1" or "sip/2"
-    // the fingerprint needs the first and last characters
-    const unsigned char *alpn = NULL;
-    unsigned int alpnlen = 0;
-    SSL_get0_alpn_selected(ssl, &alpn, &alpnlen);
-    if (alpn && alpnlen > 0)
-    {
-        ja4->alpn_sz = alpnlen;
-        ja4->alpn_values = ngx_pnalloc(pool, alpnlen);
-        if (!ja4->alpn_values)
-        {
-            return NGX_DECLINED;
-        }
-        ngx_memcpy(ja4->alpn_values, alpn, alpnlen);
+    ja4->alpn_first_value = c->ssl->first_alpn;
 
-        // first value
-        ja4->alpn_first_value = ja4->alpn_values[0];
-        // last value
-        ja4->alpn_last_value = ja4->alpn_values[ja4->alpn_sz - 1];
+    /* SSLVersion*/
+    // get string version:
+    const char *version_str = SSL_get_version(ssl);
+
+    if (strcmp(version_str, SSL3_VERSION_STR) == 0)
+    {
+        ja4->version = "s3";
+    }
+    else if (strcmp(version_str, TLS1_VERSION_STR) == 0)
+    {
+        ja4->version = "10";
+    }
+    else if (strcmp(version_str, TLS1_1_VERSION_STR) == 0)
+    {
+        ja4->version = "11";
+    }
+    else if (strcmp(version_str, TLS1_2_VERSION_STR) == 0)
+    {
+        ja4->version = "12";
+    }
+    else if (strcmp(version_str, TLS1_3_VERSION_STR) == 0)
+    {
+        ja4->version = "13";
+    }
+    else if (strcmp(version_str, QUICV1_VERSION_STR) == 0)
+    {
+        ja4->version = "q1";
     }
     else
     {
-        ja4->alpn_sz = 0;
-        ja4->alpn_values = NULL;
-
-        // first value, just a zero
-        ja4->alpn_first_value = '0';
-        // last value, just a zero
-        ja4->alpn_last_value = '0';
+        ja4->version = "00"; // Unknown or unhandled version
     }
-
-    /* SSLVersion*/
-    int version = SSL_version(c->ssl->connection);
-
-    switch (version)
-    {
-    case SSL3_VERSION:
-        ja4->version = "03";
-        break;
-    case TLS1_VERSION:
-        ja4->version = "10";
-        break;
-    case TLS1_1_VERSION:
-        ja4->version = "11";
-        break;
-    case TLS1_2_VERSION:
-        ja4->version = "12";
-        break;
-    case TLS1_3_VERSION:
-        ja4->version = "13";
-        break;
-    default:
-        ja4->version = "XX"; // unknown version
-        break;
-    }
-
     /* Cipher suites */
     ja4->ciphers = NULL;
     ja4->ciphers_sz = 0;
@@ -306,16 +288,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
 {
     // Calculate memory requirements for output
-    size_t len = 1     // for q/t
-                 + 2   // TLS version
-                 + 1   // d/i for SNI
-                 + 2   // count of ciphers
-                 + 2   // count of extensions
-                 + 2   // first and last characters of ALPN
-                 + 1   // underscore
-                 + 12  // truncated sha256 of ciphers in hex
-                 + 1   // underscore
-                 + 12; // truncated sha256 of extensions in hex
+    size_t len = 256; // big enough
 
     out->data = ngx_pnalloc(pool, len);
     out->len = len;
@@ -342,8 +315,8 @@ void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     ngx_snprintf(out->data + cur, 3, "%02zu", ja4->extensions_sz);
     cur += 2;
 
-    out->data[cur++] = ja4->alpn_first_value;
-    out->data[cur++] = ja4->alpn_last_value;
+    ngx_snprintf(out->data + cur, 2, "%s", ja4->alpn_first_value);
+    cur += 2;
 
     // add underscore
     out->data[cur++] = '_';
@@ -399,20 +372,8 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
 {
     // this function calculates the ja4 fingerprint but it doesn't hash extensions and ciphers
     // instead, it just comma separates them
-
-    // Estimate memory requirements for output
-    // size_t len = 1                        // for q/t
-    //              + 2                      // TLS version
-    //              + 1                      // d/i for SNI
-    //              + 2                      // count of ciphers
-    //              + 2                      // count of extensions
-    //              + ja4->ciphers_sz * 6    // ciphers and commas
-    //              + ja4->extensions_sz * 6 // extensions and commas
-    //              + 1                      // underscore
-    //              + ja4->sigalgs_sz * 6    // sigalgs and commas
-    //              + 2                      // first and last characters of ALPN
-    //              + 4;                     // separators
-    size_t len = 2000; // TODO: placeholder
+    // TODO: dynamically allocate memory
+    size_t len = 2056; // big enough
 
     out->data = ngx_pnalloc(pool, len);
     if (out->data == NULL)
@@ -439,10 +400,9 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     // 2 character count of extensions
     ngx_snprintf(out->data + cur, 3, "%02zu", ja4->extensions_sz);
     cur += 2;
-
-    out->data[cur++] = ja4->alpn_first_value;
-    out->data[cur++] = ja4->alpn_last_value;
-
+    // Add 2 characters for the ALPN ja4->alpn_first_value;
+    ngx_snprintf(out->data + cur, 2, "%s", ja4->alpn_first_value);
+    cur += 2;
     // Separator
     out->data[cur++] = '_';
 
@@ -487,6 +447,8 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
         }
         cur--; // Remove the trailing comma
     }
+    // null-terminate the string
+    out->data[cur] = '\0';
 
     out->len = cur;
 
