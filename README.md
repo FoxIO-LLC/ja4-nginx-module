@@ -4,7 +4,7 @@ This repository contains an nginx module that generates fingerprints from the JA
 
 ## Usage
 
-Simply use the Docker images provided on GitHub, clone this module into your nginx build, or manually build your own Docker image by installing the source code from our releases on GitHub.
+Docker images are available in `./docker`. The QUIC and ModSecurity images are still WIP.
 
 ## Docker
 

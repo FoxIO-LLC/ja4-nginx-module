@@ -1,3 +1,4 @@
+# TODO: WORK IN PROGRESS
 FROM alpine
 
 # Define the versions as a build argument for easy updates
