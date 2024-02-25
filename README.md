@@ -10,8 +10,6 @@ Simply use the Docker images provided on GitHub, clone this module into your ngi
 
 We publish and host Docker images of release versions on GitHub Container Registry. You can pull the image with the following command:
 
-
-
 ### Debugging
 
 To develop and debug the Dockerfile container, I find it useful to run docker with `--progress=plain --no-cache`.
