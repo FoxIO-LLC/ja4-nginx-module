@@ -31,6 +31,6 @@ To quickly try out ja4 on nginx, just run the `docker-compose.yaml` file with:
 3. Push tag to GitHub
 `git push origin vx.y.z`
 4. Create a release on GitHub
-Manually upload the tar.gz file, the sha256sum, and the nginx.patch file.
+Manually upload the tar.gz file and the sha256sum
 
 ### Release a Docker Image to GitHub Container Registry
