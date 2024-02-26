@@ -12,7 +12,7 @@ We publish and host Docker images of release versions on GitHub Container Regist
 
 ### Debugging
 
-To develop and debug the Dockerfile container, I find it useful to run docker with `--progress=plain --no-cache`.
+To develop and debug the Dockerfile container, I find it useful to run docker with `--progress=plain`.
 
 ## Developer Guide
 
@@ -34,3 +34,9 @@ To quickly try out ja4 on nginx, just run the `docker-compose.yaml` file with:
 Manually upload the tar.gz file and the sha256sum
 
 ### Release a Docker Image to GitHub Container Registry
+
+Update the file `docker/Dockerfile` to pull from the most recently published release. Then build and tag the image:
+`docker build -t ghcr.io/foxio-llc/ja4-nginx-module:vx.y.z-beta .`
+
+Then push the image to the GitHub Container Registry:
+`docker push ghcr.io/foxio-llc/ja4-nginx-module:vx.y.z-beta`
