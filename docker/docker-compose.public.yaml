@@ -3,7 +3,13 @@
 version: "3.8"
 services:
   ja4-nginx:
+    image: ghcr.io/foxio-llc/ja4-nginx-module:v1.0.2-beta
     ports:
       - "80:80"
       - "443:443"
     restart: always
+    volumes:
+      - ../nginx_utils/nginx.conf:/etc/nginx/conf/nginx.conf:ro
+      # ssl
+      - ../nginx_utils/server.crt:/etc/nginx/conf/server.crt:ro
+      - ../nginx_utils/server.key:/etc/nginx/conf/server.key:ro
