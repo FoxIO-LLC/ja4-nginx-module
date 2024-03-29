@@ -428,6 +428,7 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     // 2 character count of ciphers
     ngx_snprintf(out->data + cur, 3, "%02zu", ja4->ciphers_sz);
     cur += 2;
+
     // 2 character count of extensions
     ngx_snprintf(out->data + cur, 3, "%02zu", ja4->extensions_sz);
     cur += 2;
@@ -441,6 +442,7 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
         ngx_snprintf(out->data + cur, 2, "%s", ja4->alpn_first_value);
     }
     cur += 2;
+    
     // Separator
     out->data[cur++] = '_';
 
