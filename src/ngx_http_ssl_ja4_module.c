@@ -98,7 +98,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     // TODO: Need to detect QUIC
     // 1. Determine the transport protocol:
     // (This is a placeholder and might need to be replaced depending on how you determine the protocol in your environment.)
-    ja4->transport = 't'; // Assuming default is TCP. You'll need to add a check for QUIC.
+    ja4->transport = 't'; // Assuming default is TCP.
 
     // TODO: verify this
     // 2. Determine if SNI is present or not:
@@ -155,8 +155,6 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 
         // allocate memory
         ja4->ciphers = ngx_pnalloc(pool, len);
-
-        // check if memory allocation was successful
         if (ja4->ciphers == NULL)
         {
             return NGX_DECLINED;
@@ -228,13 +226,18 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         qsort(ja4->extensions, ja4->extensions_sz, sizeof(unsigned short), compare_ciphers);
     }
 
-    // signiture algorithms
+    // signature algorithms
     ja4->sigalgs = NULL;
     ja4->sigalgs_sz = 0;
     if (c->ssl->sigalgs_sz && c->ssl->sigalgs_hash_values)
     {
-        len = c->ssl->sigalgs_sz * sizeof(char *);
+        len = c->ssl->sigalgs_sz * sizeof(unsigned short);
         ja4->sigalgs = ngx_pnalloc(pool, len);
+        if (ja4->sigalgs == NULL)
+        {
+            return NGX_DECLINED;
+        }
+        
         for (i = 0; i < c->ssl->sigalgs_sz; ++i)
         {
             ja4->sigalgs[ja4->sigalgs_sz++] = c->ssl->sigalgs_hash_values[i];
@@ -282,15 +285,20 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         ngx_memcpy(ja4->extension_hash_truncated, hex_hash_truncated, 12);
         ja4->extension_hash_truncated[12] = '\0';
     }
-
     return NGX_OK;
 }
 void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
 {
+    printf("start");
     // Calculate memory requirements for output
     size_t len = 256; // big enough
 
     out->data = ngx_pnalloc(pool, len);
+    if (out->data == NULL)
+    {
+        out->len = 0;
+        return;
+    }
     out->len = len;
 
     size_t cur = 0;
@@ -317,6 +325,7 @@ void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
 
     ngx_snprintf(out->data + cur, 2, "%s", ja4->alpn_first_value);
     cur += 2;
+    printf("hawlfway");
 
     // add underscore
     out->data[cur++] = '_';
@@ -331,8 +340,9 @@ void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     // add extension hash, 24 character with null terminator
     ngx_snprintf(out->data + cur, 13, "%s", ja4->extension_hash_truncated);
     cur += 12; // Adjust the current pointer by 24 chars for the extension
-
+    printf("assign");
     out->len = cur;
+    printf("end");
 
 #if (NGX_DEBUG)
     ngx_ssl_ja4_detail_print(pool, ja4);
@@ -350,14 +360,13 @@ ngx_http_ssl_ja4(ngx_http_request_t *r,
     {
         return NGX_OK;
     }
-
     if (ngx_ssl_ja4(r->connection, r->pool, &ja4) == NGX_DECLINED)
     {
         return NGX_ERROR;
     }
-
+    printf("break here ->");
     ngx_ssl_ja4_fp(r->pool, &ja4, &fp);
-
+    
     v->data = fp.data;
     v->len = fp.len;
     v->valid = 1;
@@ -378,8 +387,8 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     // alpn (2 chars), separators ('_' x3), null-terminator
     size_t len = 1 + 2 + 1 + 2 + 2 + 2 + 3 + 1;
     // Dynamic size for variable elements: ciphers, extensions, signature algorithms
-    len += (ja4->ciphers_sz * 5) + ja4->ciphers_sz;       // 5 chars per cipher + comma
-    len += (ja4->extensions_sz * 5) + ja4->extensions_sz; // 5 chars per extension + comma
+    len += (ja4->ciphers_sz * 6) + ja4->ciphers_sz;       // 5 chars per cipher + comma
+    len += (ja4->extensions_sz * 6) + ja4->extensions_sz; // 5 chars per extension + comma
     for (size_t i = 0; i < ja4->sigalgs_sz; ++i)
     {
         len += strlen(ja4->sigalgs[i]) + 1; // strlen of sigalg + comma
