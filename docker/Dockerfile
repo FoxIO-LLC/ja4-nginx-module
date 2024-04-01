@@ -1,7 +1,7 @@
 FROM alpine
 
 # Define the version as a build argument for easy updates
-ARG VERSION=v1.0.2-beta
+ARG VERSION=v1.0.3-beta
 ARG NGINX_VERSION=1.25.0
 RUN apk add --no-cache \
     gcc \
