@@ -316,14 +316,23 @@ void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     // out->data[cur++] = (ja4->has_sni) ? 'd' : 'i'; // Assuming has_sni is a boolean.
     // TODO: placeholder
     out->data[cur++] = ja4->has_sni;
+
     // 2 character count of ciphers
     ngx_snprintf(out->data + cur, 3, "%02zu", ja4->ciphers_sz);
     cur += 2;
+
     // 2 character count of extensions
     ngx_snprintf(out->data + cur, 3, "%02zu", ja4->extensions_sz);
     cur += 2;
 
-    ngx_snprintf(out->data + cur, 2, "%s", ja4->alpn_first_value);
+    if(ja4->alpn_first_value == NULL)
+    {
+        ngx_snprintf(out->data + cur, 2, "00");
+    }
+    else
+    {
+        ngx_snprintf(out->data + cur, 2, "%s", ja4->alpn_first_value);
+    }
     cur += 2;
     printf("hawlfway");
 
@@ -428,12 +437,21 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     // 2 character count of ciphers
     ngx_snprintf(out->data + cur, 3, "%02zu", ja4->ciphers_sz);
     cur += 2;
+
     // 2 character count of extensions
     ngx_snprintf(out->data + cur, 3, "%02zu", ja4->extensions_sz);
     cur += 2;
     // Add 2 characters for the ALPN ja4->alpn_first_value;
-    ngx_snprintf(out->data + cur, 2, "%s", ja4->alpn_first_value);
+    if(ja4->alpn_first_value == NULL)
+    {
+        ngx_snprintf(out->data + cur, 2, "00");
+    }
+    else
+    {
+        ngx_snprintf(out->data + cur, 2, "%s", ja4->alpn_first_value);
+    }
     cur += 2;
+    
     // Separator
     out->data[cur++] = '_';
 
@@ -503,7 +521,7 @@ ngx_http_ssl_ja4_string(ngx_http_request_t *r,
     {
         return NGX_ERROR;
     }
-
+    
     ngx_ssl_ja4_fp_string(r->pool, &ja4, &fp);
 
     v->data = fp.data;
