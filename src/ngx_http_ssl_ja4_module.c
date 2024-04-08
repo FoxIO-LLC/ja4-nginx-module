@@ -237,7 +237,6 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         {
             return NGX_DECLINED;
         }
-        
         for (i = 0; i < c->ssl->sigalgs_sz; ++i)
         {
             ja4->sigalgs[ja4->sigalgs_sz++] = c->ssl->sigalgs_hash_values[i];
@@ -289,7 +288,6 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 }
 void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
 {
-    printf("start");
     // Calculate memory requirements for output
     size_t len = 256; // big enough
 
@@ -313,19 +311,31 @@ void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     cur += 2;
 
     // SNI = d, no SNI = i
-    // out->data[cur++] = (ja4->has_sni) ? 'd' : 'i'; // Assuming has_sni is a boolean.
-    // TODO: placeholder
     out->data[cur++] = ja4->has_sni;
 
     // 2 character count of ciphers
-    ngx_snprintf(out->data + cur, 3, "%02zu", ja4->ciphers_sz);
+    if (ja4->ciphers_sz == 0)
+    {
+        ngx_snprintf(out->data + cur, 3, "00");
+    }
+    else
+    {
+        ngx_snprintf(out->data + cur, 3, "%02zu", ja4->ciphers_sz);
+    }
     cur += 2;
 
     // 2 character count of extensions
-    ngx_snprintf(out->data + cur, 3, "%02zu", ja4->extensions_sz);
+    if (ja4->extensions_sz == 0)
+    {
+        ngx_snprintf(out->data + cur, 3, "00");
+    }
+    else
+    {
+        ngx_snprintf(out->data + cur, 3, "%02zu", ja4->extensions_sz);
+    }
     cur += 2;
 
-    if(ja4->alpn_first_value == NULL)
+    if (ja4->alpn_first_value == NULL)
     {
         ngx_snprintf(out->data + cur, 2, "00");
     }
@@ -334,24 +344,35 @@ void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
         ngx_snprintf(out->data + cur, 2, "%s", ja4->alpn_first_value);
     }
     cur += 2;
-    printf("hawlfway");
 
     // add underscore
     out->data[cur++] = '_';
 
     // add cipher hash, 24 character with null terminator
-    ngx_snprintf(out->data + cur, 13, "%s", ja4->cipher_hash_truncated);
-    cur += 12; // Adjust the current pointer by 24 chars for the cipher hash
+    if (ja4->cipher_hash_truncated == NULL)
+    {
+        ngx_snprintf(out->data + cur, 13, "000000000000");
+    }
+    else
+    {
+        ngx_snprintf(out->data + cur, 13, "%s", ja4->cipher_hash_truncated);
+    }
+    cur += 12;
 
     // add underscore
     out->data[cur++] = '_';
 
     // add extension hash, 24 character with null terminator
-    ngx_snprintf(out->data + cur, 13, "%s", ja4->extension_hash_truncated);
+    if (ja4->extension_hash_truncated == NULL)
+    {
+        ngx_snprintf(out->data + cur, 13, "000000000000");
+    }
+    else
+    {
+        ngx_snprintf(out->data + cur, 13, "%s", ja4->extension_hash_truncated);
+    }
     cur += 12; // Adjust the current pointer by 24 chars for the extension
-    printf("assign");
     out->len = cur;
-    printf("end");
 
 #if (NGX_DEBUG)
     ngx_ssl_ja4_detail_print(pool, ja4);
@@ -373,9 +394,9 @@ ngx_http_ssl_ja4(ngx_http_request_t *r,
     {
         return NGX_ERROR;
     }
-    printf("break here ->");
+
     ngx_ssl_ja4_fp(r->pool, &ja4, &fp);
-    
+
     v->data = fp.data;
     v->len = fp.len;
     v->valid = 1;
@@ -428,21 +449,49 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     out->data[cur++] = 't';
 
     // 2 character TLS version
-    memcpy(out->data + cur, ja4->version, 2);
+    if (ja4->version == NULL)
+    {
+        ngx_snprintf(out->data + cur, 3, "00");
+    }
+    else
+    {
+        ngx_snprintf(out->data + cur, 3, "%s", ja4->version);
+    }
     cur += 2;
 
     // SNI = d, no SNI = i
-    out->data[cur++] = ja4->has_sni;
+    if (ja4->has_sni == NULL)
+    {
+        out->data[cur++] = 'i';
+    }
+    else
+    {
+        out->data[cur++] = ja4->has_sni;
+    }
 
     // 2 character count of ciphers
-    ngx_snprintf(out->data + cur, 3, "%02zu", ja4->ciphers_sz);
+    if (ja4->ciphers_sz == 0)
+    {
+        ngx_snprintf(out->data + cur, 3, "00");
+    }
+    else
+    {
+        ngx_snprintf(out->data + cur, 3, "%02zu", ja4->ciphers_sz);
+    }
     cur += 2;
 
     // 2 character count of extensions
-    ngx_snprintf(out->data + cur, 3, "%02zu", ja4->extensions_sz);
+    if (ja4->extensions_sz == 0)
+    {
+        ngx_snprintf(out->data + cur, 3, "00");
+    }
+    else
+    {
+        ngx_snprintf(out->data + cur, 3, "%02zu", ja4->extensions_sz);
+    }
     cur += 2;
     // Add 2 characters for the ALPN ja4->alpn_first_value;
-    if(ja4->alpn_first_value == NULL)
+    if (ja4->alpn_first_value == NULL)
     {
         ngx_snprintf(out->data + cur, 2, "00");
     }
@@ -451,20 +500,20 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
         ngx_snprintf(out->data + cur, 2, "%s", ja4->alpn_first_value);
     }
     cur += 2;
-    
+
     // Separator
     out->data[cur++] = '_';
 
     // add ciphers
     size_t i;
-    for (i = 0; i < ja4->ciphers_sz; ++i)
-    {
-        int n = ngx_snprintf(out->data + cur, 6, "%05d,", ja4->ciphers[i]) - out->data - cur;
-        cur += n;
-    }
 
     if (ja4->ciphers_sz > 0)
     {
+        for (i = 0; i < ja4->ciphers_sz; ++i)
+        {
+            int n = ngx_snprintf(out->data + cur, 6, "%05d,", ja4->ciphers[i]) - out->data - cur;
+            cur += n;
+        }
         cur--; // Remove the trailing comma
     }
 
@@ -521,7 +570,7 @@ ngx_http_ssl_ja4_string(ngx_http_request_t *r,
     {
         return NGX_ERROR;
     }
-    
+
     ngx_ssl_ja4_fp_string(r->pool, &ja4, &fp);
 
     v->data = fp.data;
