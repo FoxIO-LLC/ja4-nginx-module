@@ -1,10 +1,10 @@
 diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
-index 89f277fe5..9250a5571 100644
+index 104e8daf7..ad8c740c6 100644
 --- a/src/event/ngx_event_openssl.c
 +++ b/src/event/ngx_event_openssl.c
-@@ -1793,6 +1793,124 @@ ngx_ssl_set_session(ngx_connection_t *c, ngx_ssl_session_t *session)
-     return NGX_OK;
+@@ -1759,6 +1759,124 @@ ngx_ssl_set_session(ngx_connection_t *c, ngx_ssl_session_t *session)
  }
+ 
  
 +// adds ciphers to the ssl object for ja4 fingerprint
 +void
@@ -124,18 +124,16 @@ index 89f277fe5..9250a5571 100644
 +    return 1;
 +}
 +
- 
  ngx_int_t
  ngx_ssl_handshake(ngx_connection_t *c)
-@@ -1812,9 +1930,15 @@ ngx_ssl_handshake(ngx_connection_t *c)
-     }
+ {
+@@ -1778,8 +1896,14 @@ ngx_ssl_handshake(ngx_connection_t *c)
  
      ngx_ssl_clear_error(c->log);
--
-+    
+ 
 +    // client hello callback function on the session context, ja4 extensions
-+    SSL_CTX_set_client_hello_cb(c->ssl->session_ctx, ngx_SSL_early_cb_fn, c);   
-+    
++    SSL_CTX_set_client_hello_cb(c->ssl->session_ctx, ngx_SSL_early_cb_fn, c);
++
      n = SSL_do_handshake(c->ssl->connection);
  
 +    // ja4 cipher suites
@@ -145,10 +143,10 @@ index 89f277fe5..9250a5571 100644
  
      if (n == 1) {
 diff --git a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl.h
-index ebb2c35bf..317fdb18e 100644
+index 860ea26dd..89d6cfc01 100644
 --- a/src/event/ngx_event_openssl.h
 +++ b/src/event/ngx_event_openssl.h
-@@ -128,6 +128,24 @@ struct ngx_ssl_connection_s {
+@@ -120,6 +120,24 @@ struct ngx_ssl_connection_s {
      unsigned                    in_ocsp:1;
      unsigned                    early_preread:1;
      unsigned                    write_blocked:1;
@@ -169,16 +167,16 @@ index ebb2c35bf..317fdb18e 100644
 +
 +    // ja4l
 +    uint16_t handshake_roundtrip_microseconds; // a whole number - max is probably thousands
-+    uint8_t ttl;                // time to live - a whole number - max is 255
++    uint8_t ttl; // time to live - a whole number - max is 255
  };
  
  
 diff --git a/src/http/modules/ngx_http_ssl_module.c b/src/http/modules/ngx_http_ssl_module.c
-index 1c92d9fa8..3e5f03fdf 100644
+index 4c4a598b1..93b7c4f5f 100644
 --- a/src/http/modules/ngx_http_ssl_module.c
 +++ b/src/http/modules/ngx_http_ssl_module.c
 @@ -431,6 +431,13 @@ ngx_http_ssl_alpn_select(ngx_ssl_conn_t *ssl_conn, const unsigned char **out,
-     ngx_connection_t        *c;
+     ngx_connection_t       *c;
  
      c = ngx_ssl_get_connection(ssl_conn);
 +    // add first alpn value for ja4 to c->ssl
