@@ -1,8 +1,9 @@
+# TODO
 FROM alpine
 
 # Define the version as a build argument for easy updates
-ARG VERSION=v1.0.3-beta
-ARG NGINX_VERSION=1.25.0
+ARG NGINX_VERSION=1.24.0
+ARG OPENSSL_VERSION=3.2.1
 RUN apk add --no-cache \
     gcc \
     libc-dev \
@@ -21,29 +22,29 @@ RUN adduser -D dswebuser
 WORKDIR /tmp
 
 # INSTALL JA4 module
-RUN wget https://github.com/FoxIO-LLC/ja4-nginx-module/releases/download/${VERSION}/ja4-nginx-module-${VERSION}.tar.gz && \
-    tar -zxvf ja4-nginx-module-${VERSION}.tar.gz
+RUN wget https://github.com/FoxIO-LLC/ja4-nginx-module/releases/download/${JA4_MODULE_VERSION}/ja4-nginx-module-${JA4_MODULE_VERSION}.tar.gz && \
+    tar -zxvf ja4-nginx-module-${JA4_MODULE_VERSION}.tar.gz
 
 # INSTALL NGINX
 RUN wget https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz && \
     tar -zxvf nginx-${NGINX_VERSION}.tar.gz
 
 # INSTALL OpenSSL
-RUN wget https://github.com/openssl/openssl/releases/download/openssl-3.2.1/openssl-3.2.1.tar.gz && \
-    tar -zxvf openssl-3.2.1.tar.gz
+RUN wget https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz && \
+    tar -zxvf openssl-${OPENSSL_VERSION}.tar.gz
 
 # patch openssl
-WORKDIR /tmp/openssl-3.2.1
+WORKDIR /tmp/openssl-${OPENSSL_VERSION}
 
-RUN patch -p1 < /tmp/ja4-nginx-module-${VERSION}/patches/openssl.patch
+RUN patch -p1 < /tmp/ja4-nginx-module-${JA4_MODULE_VERSION}/patches/openssl.patch
 
 # patch nginx
 WORKDIR /tmp/nginx-${NGINX_VERSION}
 
-RUN patch -p1 < /tmp/ja4-nginx-module-${VERSION}/patches/nginx.patch
+RUN patch -p1 < /tmp/ja4-nginx-module-${JA4_MODULE_VERSION}/patches/nginx.patch
 
 # Build Nginx
-RUN ./configure --with-openssl=/tmp/openssl-3.2.1 --with-debug --with-compat --add-module=/tmp/ja4-nginx-module-${VERSION}/src --with-http_ssl_module --prefix=/etc/nginx && \
+RUN ./configure --with-openssl=/tmp/openssl-${OPENSSL_VERSION} --with-debug --with-compat --add-module=/tmp/ja4-nginx-module-${JA4_MODULE_VERSION}/src --with-http_ssl_module --prefix=/etc/nginx && \
     make && \
     make install
 
