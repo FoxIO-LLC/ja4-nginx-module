@@ -4,6 +4,7 @@ FROM alpine
 # Define the version as a build argument for easy updates
 ARG NGINX_VERSION=1.24.0
 ARG OPENSSL_VERSION=3.2.1
+ARG JA4_MODULE_VERSION=v1.0.5-beta
 RUN apk add --no-cache \
     gcc \
     libc-dev \
@@ -20,7 +21,6 @@ RUN apk add --no-cache \
 RUN adduser -D dswebuser
 
 WORKDIR /tmp
-
 # INSTALL JA4 module
 RUN wget https://github.com/FoxIO-LLC/ja4-nginx-module/releases/download/${JA4_MODULE_VERSION}/ja4-nginx-module-${JA4_MODULE_VERSION}.tar.gz && \
     tar -zxvf ja4-nginx-module-${JA4_MODULE_VERSION}.tar.gz

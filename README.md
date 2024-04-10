@@ -27,17 +27,18 @@ To quickly try out ja4 on nginx, just run the `docker-compose.yaml` file with:
 ## Creating a Release
 
 1. Tag the release
-`git tag -a vx.y.z-alpha -m "Release version x.y.z"`
+`git tag -a vx.y.z-beta -m "Release version x.y.z"`
 2. Run script
 `./release.sh`
 3. Push tag to GitHub
-`git push origin vx.y.z`
+`git push origin vx.y.z-beta`
 4. Create a release on GitHub
 Manually upload the tar.gz file and the sha256sum
 
 ### Release a Docker Image to GitHub Container Registry
 
 Update the file `docker/Dockerfile` to pull from the most recently published release. Then build and tag the image:
+`cd docker`
 `docker build -t ghcr.io/foxio-llc/ja4-nginx-module:vx.y.z-beta .`
 
 Then push the image to the GitHub Container Registry:
