@@ -10,7 +10,7 @@ Docker images are available in `./docker`. The QUIC and ModSecurity images are s
 
 We publish and host Docker images of release versions on GitHub Container Registry. You can pull the image with the following command:
 
-`docker pull ghcr.io/foxio-llc/ja4-nginx-module:v1.0.2-beta`
+`docker pull ghcr.io/foxio-llc/ja4-nginx-module:v1.0.5-beta`
 
 ### Debugging
 
