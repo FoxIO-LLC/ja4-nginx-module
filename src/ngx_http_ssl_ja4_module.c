@@ -349,28 +349,16 @@ void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     out->data[cur++] = '_';
 
     // add cipher hash, 24 character with null terminator
-    if (ja4->cipher_hash_truncated == NULL)
-    {
-        ngx_snprintf(out->data + cur, 13, "000000000000");
-    }
-    else
-    {
-        ngx_snprintf(out->data + cur, 13, "%s", ja4->cipher_hash_truncated);
-    }
+    ngx_snprintf(out->data + cur, 13, "%s", ja4->cipher_hash_truncated);
+    
     cur += 12;
 
     // add underscore
     out->data[cur++] = '_';
 
     // add extension hash, 24 character with null terminator
-    if (ja4->extension_hash_truncated == NULL)
-    {
-        ngx_snprintf(out->data + cur, 13, "000000000000");
-    }
-    else
-    {
-        ngx_snprintf(out->data + cur, 13, "%s", ja4->extension_hash_truncated);
-    }
+    ngx_snprintf(out->data + cur, 13, "%s", ja4->extension_hash_truncated);
+    
     cur += 12; // Adjust the current pointer by 24 chars for the extension
     out->len = cur;
 
@@ -460,14 +448,8 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     cur += 2;
 
     // SNI = d, no SNI = i
-    if (ja4->has_sni == NULL)
-    {
-        out->data[cur++] = 'i';
-    }
-    else
-    {
-        out->data[cur++] = ja4->has_sni;
-    }
+    out->data[cur++] = ja4->has_sni;
+
 
     // 2 character count of ciphers
     if (ja4->ciphers_sz == 0)

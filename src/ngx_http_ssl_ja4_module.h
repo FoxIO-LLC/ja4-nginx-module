@@ -6,7 +6,7 @@
 // STRUCTS
 typedef struct ngx_ssl_ja4_s
 {
-    const char *version; // TLS version
+    char *version; // TLS version
 
     unsigned char transport; // 'q' for QUIC, 't' for TCP
 
@@ -26,7 +26,7 @@ typedef struct ngx_ssl_ja4_s
     char *alpn_values;
 
     // For the first and last ALPN extension values
-    char* alpn_first_value;
+    char *alpn_first_value;
 
     char cipher_hash[65];           // 32 bytes * 2 characters/byte + 1 for '\0'
     char cipher_hash_truncated[13]; // 12 bytes * 2 characters/byte + 1 for '\0'
@@ -38,7 +38,7 @@ typedef struct ngx_ssl_ja4_s
 
 typedef struct ngx_ssl_ja4s_s
 {
-    const char *version; // TLS version
+    char *version; // TLS version
 
     unsigned char transport; // 'q' for QUIC, 't' for TCP
 
@@ -49,8 +49,8 @@ typedef struct ngx_ssl_ja4s_s
     unsigned short *extensions; // List of extensions
 
     // For the ALPN chosen by the server
-    char alpn_chosen_first; // First character of the ALPN chosen
-    char alpn_chosen_last;  // Last character of the ALPN chosen
+    unsigned char alpn_chosen_first; // First character of the ALPN chosen
+    unsigned char alpn_chosen_last;  // Last character of the ALPN chosen
 
     char extension_hash[65];           // Full SHA256 hash (32 bytes * 2 characters/byte + 1 for '\0')
     char extension_hash_truncated[13]; // Truncated SHA256 hash (12 bytes * 2 characters/byte + 1 for '\0')
