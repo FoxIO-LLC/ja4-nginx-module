@@ -4,7 +4,12 @@ This repository contains an nginx module that generates fingerprints from the JA
 
 ## Usage
 
-Docker images are available in `./docker`. The QUIC and ModSecurity images are still WIP.
+Docker images and compose files are available in `./docker`. The QUIC and ModSecurity images are still WIP.
+
+You can build using the source code with:
+
+1. `docker build -t ja4-nginx:latest .`
+2. `docker run -p 80:80 -p 443:443 ja4-nginx:latest`
 
 ## Docker
 
