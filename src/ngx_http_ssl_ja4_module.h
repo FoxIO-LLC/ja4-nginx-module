@@ -277,12 +277,12 @@ ngx_ssl_ja4_detail_print(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                    pool->log, 0, "ssl_ja4: sigalgs: length: %d\n",
                    ja4->sigalgs_sz);
     
-    for (i = 0; i < ja4->sigalgs_sz; ++i)
-    {
-        ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
-                       pool->log, 0, "ssl_ja4: |    sigalgs: %s",
-                       ja4->sigalgs[i]);
-    }
+    // for (i = 0; i < ja4->sigalgs_sz; ++i)
+    // {
+    //     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
+    //                    pool->log, 0, "ssl_ja4: |    sigalgs: %s",
+    //                    ja4->sigalgs[i]);
+    // }
 
     /* ALPN Values */
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
