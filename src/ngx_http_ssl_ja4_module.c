@@ -243,28 +243,44 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         }
     }
 
+
     if (ja4->extensions && ja4->extensions_sz)
     {
         unsigned char hash_result[SHA256_DIGEST_LENGTH];
         SHA256_CTX sha256;
-        SHA256_Init(&sha256);
+        if (SHA256_Init(&sha256) != 1)
+        {
+            return NGX_DECLINED;
+        }
 
         for (i = 0; i < ja4->extensions_sz; i++)
         {
-            SHA256_Update(&sha256, &(ja4->extensions[i]), sizeof(unsigned short));
+            if (SHA256_Update(&sha256, &(ja4->extensions[i]), sizeof(unsigned short)) != 1)
+            {
+                return NGX_DECLINED;
+            }
         }
 
         if (ja4->sigalgs_sz)
         {
             // add underscore
-            SHA256_Update(&sha256, "_", 1);
+            if (SHA256_Update(&sha256, "_", 1) != 1)
+            {
+                return NGX_DECLINED;
+            }
             for (i = 0; i < ja4->sigalgs_sz; i++)
             {
-                SHA256_Update(&sha256, ja4->sigalgs[i], strlen(ja4->sigalgs[i]));
+                if (SHA256_Update(&sha256, ja4->sigalgs[i], strlen(ja4->sigalgs[i])) != 1)
+                {
+                    return NGX_DECLINED;
+                }
             }
         }
 
-        SHA256_Final(hash_result, &sha256);
+        if (SHA256_Final(hash_result, &sha256) != 1)
+        {
+            return NGX_DECLINED;
+        }
 
         // Convert the full hash to hexadecimal format
         char hex_hash[2 * SHA256_DIGEST_LENGTH + 1]; // +1 for null-terminator
@@ -284,6 +300,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         ngx_memcpy(ja4->extension_hash_truncated, hex_hash_truncated, 12);
         ja4->extension_hash_truncated[12] = '\0';
     }
+
     return NGX_OK;
 }
 void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
@@ -350,7 +367,7 @@ void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
 
     // add cipher hash, 24 character with null terminator
     ngx_snprintf(out->data + cur, 13, "%s", ja4->cipher_hash_truncated);
-    
+
     cur += 12;
 
     // add underscore
@@ -358,7 +375,7 @@ void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
 
     // add extension hash, 24 character with null terminator
     ngx_snprintf(out->data + cur, 13, "%s", ja4->extension_hash_truncated);
-    
+
     cur += 12; // Adjust the current pointer by 24 chars for the extension
     out->len = cur;
 

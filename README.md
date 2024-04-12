@@ -4,7 +4,16 @@ This repository contains an nginx module that generates fingerprints from the JA
 
 ## Usage
 
-Docker images are available in `./docker`. The QUIC and ModSecurity images are still WIP.
+Docker images and compose files are available in `./docker`. The QUIC and ModSecurity images are still WIP.
+
+You can quickly test out this module with:
+1. `cd docker`
+2. `docker-compose up --build`
+
+You can also build from source with:
+
+1. `docker build -t ja4-nginx:latest .`
+2. `docker run -p 80:80 -p 443:443 ja4-nginx:source`
 
 ## Docker
 
@@ -19,10 +28,6 @@ To develop and debug the Dockerfile container, I find it useful to run docker wi
 ## Developer Guide
 
 If you want to develop this module, you should head to the [ja4-nginx fork](https://github.com/FoxIO-LLC/ja4-nginx). There, you can load this module into a fork of the nginx source code and build it.
-
-To quickly try out ja4 on nginx, just run the `docker-compose.yaml` file with:
-`cd docker`
-`docker-compose up --build`
 
 ## Creating a Release
 
@@ -108,12 +113,8 @@ typedef struct ngx_ssl_ja4_s
     size_t sigalgs_sz;       // Count of signature algorithms
     char **sigalgs; // List of signature algorithms
 
-    // For the entire ALPN extension value
-    size_t alpn_sz;
-    char *alpn_values;
-
     // For the first and last ALPN extension values
-    char* alpn_first_value;
+    char *alpn_first_value;
 
     char cipher_hash[65];           // 32 bytes * 2 characters/byte + 1 for '\0'
     char cipher_hash_truncated[13]; // 12 bytes * 2 characters/byte + 1 for '\0'
