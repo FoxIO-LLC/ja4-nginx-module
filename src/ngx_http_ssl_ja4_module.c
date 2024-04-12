@@ -382,7 +382,7 @@ ngx_http_ssl_ja4(ngx_http_request_t *r,
     {
         return NGX_ERROR;
     }
-
+ 
     ngx_ssl_ja4_fp(r->pool, &ja4, &fp);
 
     v->data = fp.data;
@@ -400,6 +400,12 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     // this function calculates the ja4 fingerprint but it doesn't hash extensions and ciphers
     // instead, it just comma separates them
 
+    char **sigalgs_copy = malloc(ja4->sigalgs_sz * sizeof(char *));
+    for (size_t i = 0; i < ja4->sigalgs_sz; ++i) 
+    {
+        sigalgs_copy[i] = strdup(ja4->sigalgs[i]);
+    }
+
     // Initial size calculation
     // Base size for fixed elements: 't', version (2 chars), has_sni, ciphers_sz (2 chars), extensions_sz (2 chars),
     // alpn (2 chars), separators ('_' x3), null-terminator
@@ -416,6 +422,7 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
 
     // Allocate memory based on calculated size
     out->data = ngx_pnalloc(pool, len);
+
     if (out->data == NULL)
     {
         out->len = 0;
@@ -449,7 +456,6 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
 
     // SNI = d, no SNI = i
     out->data[cur++] = ja4->has_sni;
-
 
     // 2 character count of ciphers
     if (ja4->ciphers_sz == 0)
@@ -521,15 +527,20 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
         out->data[cur++] = '_'; // Add separator only if signature algorithms are present
         for (i = 0; i < ja4->sigalgs_sz; ++i)
         {
-
-            int n = ngx_snprintf(out->data + cur, 6, "%s,", ja4->sigalgs[i]) - out->data - cur;
+            int n = ngx_snprintf(out->data + cur, 6, "%s,", sigalgs_copy[i]) - out->data - cur;
             cur += n;
         }
         cur--; // Remove the trailing comma
     }
+
+    for (size_t i = 0; i < ja4->sigalgs_sz; ++i) 
+    {
+        free(sigalgs_copy[i]);
+    }
+    free(sigalgs_copy);
+
     // null-terminate the string
     out->data[cur] = '\0';
-
     out->len = cur;
 
 #if (NGX_DEBUG)
