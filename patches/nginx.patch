@@ -1,8 +1,8 @@
 diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
-index 104e8daf7..ad8c740c6 100644
+index 104e8daf7..bdf0d3064 100644
 --- a/src/event/ngx_event_openssl.c
 +++ b/src/event/ngx_event_openssl.c
-@@ -1759,6 +1759,124 @@ ngx_ssl_set_session(ngx_connection_t *c, ngx_ssl_session_t *session)
+@@ -1759,6 +1759,123 @@ ngx_ssl_set_session(ngx_connection_t *c, ngx_ssl_session_t *session)
  }
  
  
@@ -63,9 +63,8 @@ index 104e8daf7..ad8c740c6 100644
 +
 +        // Save the array of hex strings to your struct
 +        c->ssl->sigalgs_hash_values = sigalgs_hex_strings;
-+        c->ssl->sigalgs_sz = num_sigalgs;
 +    }
-+    c->ssl->sigalgs_sz = num_sigalgs; 
++    c->ssl->sigalgs_sz = num_sigalgs;
 +}
 +// adds extensions to the ssl object for ja4 fingerprint
 +int
@@ -127,7 +126,7 @@ index 104e8daf7..ad8c740c6 100644
  ngx_int_t
  ngx_ssl_handshake(ngx_connection_t *c)
  {
-@@ -1778,8 +1896,14 @@ ngx_ssl_handshake(ngx_connection_t *c)
+@@ -1778,8 +1895,14 @@ ngx_ssl_handshake(ngx_connection_t *c)
  
      ngx_ssl_clear_error(c->log);
  
