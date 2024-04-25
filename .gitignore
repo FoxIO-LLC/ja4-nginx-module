@@ -4,3 +4,4 @@
 *.crt
 *.key
 *.pem
+nginx_utils/logs
