@@ -18,10 +18,10 @@ static ngx_http_variable_t ngx_http_ssl_ja4_variables_list[] = {
      NULL,
      ngx_http_ssl_ja4,
      0, 0, 0},
-    {ngx_string("http_ssl_ja4_string"),
-     NULL,
-     ngx_http_ssl_ja4_string,
-     0, 0, 0},
+    // {ngx_string("http_ssl_ja4_string"),
+    //  NULL,
+    //  ngx_http_ssl_ja4_string,
+    //  0, 0, 0},
     {ngx_string("http_ssl_ja4s"),
      NULL,
      ngx_http_ssl_ja4s,
@@ -412,185 +412,185 @@ ngx_http_ssl_ja4(ngx_http_request_t *r,
 }
 
 // JA4 STRING
-void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
-{
-    // this function calculates the ja4 fingerprint but it doesn't hash extensions and ciphers
-    // instead, it just comma separates them
+// void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
+// {
+//     // this function calculates the ja4 fingerprint but it doesn't hash extensions and ciphers
+//     // instead, it just comma separates them
 
-    char **sigalgs_copy = malloc(ja4->sigalgs_sz * sizeof(char *));
-    for (size_t i = 0; i < ja4->sigalgs_sz; ++i) 
-    {
-        sigalgs_copy[i] = strdup(ja4->sigalgs[i]);
-    }
+//     char **sigalgs_copy = malloc(ja4->sigalgs_sz * sizeof(char *));
+//     for (size_t i = 0; i < ja4->sigalgs_sz; ++i) 
+//     {
+//         sigalgs_copy[i] = strdup(ja4->sigalgs[i]);
+//     }
 
-    // Initial size calculation
-    // Base size for fixed elements: 't', version (2 chars), has_sni, ciphers_sz (2 chars), extensions_sz (2 chars),
-    // alpn (2 chars), separators ('_' x3), null-terminator
-    size_t len = 1 + 2 + 1 + 2 + 2 + 2 + 3 + 1;
-    // Dynamic size for variable elements: ciphers, extensions, signature algorithms
-    len += (ja4->ciphers_sz * 6) + ja4->ciphers_sz;       // 5 chars per cipher + comma
-    len += (ja4->extensions_sz * 6) + ja4->extensions_sz; // 5 chars per extension + comma
-    for (size_t i = 0; i < ja4->sigalgs_sz; ++i)
-    {
-        len += strlen(ja4->sigalgs[i]) + 1; // strlen of sigalg + comma
-    }
+//     // Initial size calculation
+//     // Base size for fixed elements: 't', version (2 chars), has_sni, ciphers_sz (2 chars), extensions_sz (2 chars),
+//     // alpn (2 chars), separators ('_' x3), null-terminator
+//     size_t len = 1 + 2 + 1 + 2 + 2 + 2 + 3 + 1;
+//     // Dynamic size for variable elements: ciphers, extensions, signature algorithms
+//     len += (ja4->ciphers_sz * 6) + ja4->ciphers_sz;       // 5 chars per cipher + comma
+//     len += (ja4->extensions_sz * 6) + ja4->extensions_sz; // 5 chars per extension + comma
+//     for (size_t i = 0; i < ja4->sigalgs_sz; ++i)
+//     {
+//         len += strlen(ja4->sigalgs[i]) + 1; // strlen of sigalg + comma
+//     }
 
-    len += 256; // safety padding
+//     len += 256; // safety padding
 
-    // Allocate memory based on calculated size
-    out->data = ngx_pnalloc(pool, len);
+//     // Allocate memory based on calculated size
+//     out->data = ngx_pnalloc(pool, len);
 
-    if (out->data == NULL)
-    {
-        out->len = 0;
-        return;
-    }
+//     if (out->data == NULL)
+//     {
+//         out->len = 0;
+//         return;
+//     }
 
-    size_t cur = 0;
+//     size_t cur = 0;
 
-    // Populate the data as before
-    // (The rest of your function remains the same, except you no longer need the initial hardcoded size allocation)
+//     // Populate the data as before
+//     // (The rest of your function remains the same, except you no longer need the initial hardcoded size allocation)
 
-    // Note: The rest of the function logic goes here without change, using `cur` to keep track of the current position
-    // in the allocated buffer and appending each piece of data to `out->data`.
+//     // Note: The rest of the function logic goes here without change, using `cur` to keep track of the current position
+//     // in the allocated buffer and appending each piece of data to `out->data`.
 
-    // Final adjustments as per your original logic
-    out->len = cur;
+//     // Final adjustments as per your original logic
+//     out->len = cur;
 
-    // t for TCP
-    out->data[cur++] = 't';
+//     // t for TCP
+//     out->data[cur++] = 't';
 
-    // 2 character TLS version
-    if (ja4->version == NULL)
-    {
-        ngx_snprintf(out->data + cur, 3, "00");
-    }
-    else
-    {
-        ngx_snprintf(out->data + cur, 3, "%s", ja4->version);
-    }
-    cur += 2;
+//     // 2 character TLS version
+//     if (ja4->version == NULL)
+//     {
+//         ngx_snprintf(out->data + cur, 3, "00");
+//     }
+//     else
+//     {
+//         ngx_snprintf(out->data + cur, 3, "%s", ja4->version);
+//     }
+//     cur += 2;
 
-    // SNI = d, no SNI = i
-    out->data[cur++] = ja4->has_sni;
+//     // SNI = d, no SNI = i
+//     out->data[cur++] = ja4->has_sni;
 
-    // 2 character count of ciphers
-    if (ja4->ciphers_sz == 0)
-    {
-        ngx_snprintf(out->data + cur, 3, "00");
-    }
-    else
-    {
-        ngx_snprintf(out->data + cur, 3, "%02zu", ja4->ciphers_sz);
-    }
-    cur += 2;
+//     // 2 character count of ciphers
+//     if (ja4->ciphers_sz == 0)
+//     {
+//         ngx_snprintf(out->data + cur, 3, "00");
+//     }
+//     else
+//     {
+//         ngx_snprintf(out->data + cur, 3, "%02zu", ja4->ciphers_sz);
+//     }
+//     cur += 2;
 
-    // 2 character count of extensions
-    if (ja4->extensions_sz == 0)
-    {
-        ngx_snprintf(out->data + cur, 3, "00");
-    }
-    else
-    {
-        ngx_snprintf(out->data + cur, 3, "%02zu", ja4->extensions_sz);
-    }
-    cur += 2;
-    // Add 2 characters for the ALPN ja4->alpn_first_value;
-    if (ja4->alpn_first_value == NULL)
-    {
-        ngx_snprintf(out->data + cur, 2, "00");
-    }
-    else
-    {
-        ngx_snprintf(out->data + cur, 2, "%s", ja4->alpn_first_value);
-    }
-    cur += 2;
+//     // 2 character count of extensions
+//     if (ja4->extensions_sz == 0)
+//     {
+//         ngx_snprintf(out->data + cur, 3, "00");
+//     }
+//     else
+//     {
+//         ngx_snprintf(out->data + cur, 3, "%02zu", ja4->extensions_sz);
+//     }
+//     cur += 2;
+//     // Add 2 characters for the ALPN ja4->alpn_first_value;
+//     if (ja4->alpn_first_value == NULL)
+//     {
+//         ngx_snprintf(out->data + cur, 2, "00");
+//     }
+//     else
+//     {
+//         ngx_snprintf(out->data + cur, 2, "%s", ja4->alpn_first_value);
+//     }
+//     cur += 2;
 
-    // Separator
-    out->data[cur++] = '_';
+//     // Separator
+//     out->data[cur++] = '_';
 
-    // add ciphers
-    size_t i;
+//     // add ciphers
+//     size_t i;
 
-    if (ja4->ciphers_sz > 0)
-    {
-        for (i = 0; i < ja4->ciphers_sz; ++i)
-        {
-            int n = ngx_snprintf(out->data + cur, 6, "%05d,", ja4->ciphers[i]) - out->data - cur;
-            cur += n;
-        }
-        cur--; // Remove the trailing comma
-    }
+//     if (ja4->ciphers_sz > 0)
+//     {
+//         for (i = 0; i < ja4->ciphers_sz; ++i)
+//         {
+//             int n = ngx_snprintf(out->data + cur, 6, "%05d,", ja4->ciphers[i]) - out->data - cur;
+//             cur += n;
+//         }
+//         cur--; // Remove the trailing comma
+//     }
 
-    // Separator
-    out->data[cur++] = '_';
+//     // Separator
+//     out->data[cur++] = '_';
 
-    // add extensions
-    size_t j;
+//     // add extensions
+//     size_t j;
 
-    if (ja4->extensions_sz > 0)
-    {
-        for (j = 0; j < ja4->extensions_sz; ++j)
-        {
-            int n = ngx_snprintf(out->data + cur, 6, "%05d,", ja4->extensions[j]) - out->data - cur;
-            cur += n;
-        }
-        cur--; // Remove the trailing comma
-    }
+//     if (ja4->extensions_sz > 0)
+//     {
+//         for (j = 0; j < ja4->extensions_sz; ++j)
+//         {
+//             int n = ngx_snprintf(out->data + cur, 6, "%05d,", ja4->extensions[j]) - out->data - cur;
+//             cur += n;
+//         }
+//         cur--; // Remove the trailing comma
+//     }
 
-    // add signature algorithms
-    if (ja4->sigalgs_sz > 0)
-    {
-        out->data[cur++] = '_'; // Add separator only if signature algorithms are present
-        for (i = 0; i < ja4->sigalgs_sz; ++i)
-        {
-            int n = ngx_snprintf(out->data + cur, 6, "%s,", sigalgs_copy[i]) - out->data - cur;
-            cur += n;
-        }
-        cur--; // Remove the trailing comma
-    }
+//     // add signature algorithms
+//     if (ja4->sigalgs_sz > 0)
+//     {
+//         out->data[cur++] = '_'; // Add separator only if signature algorithms are present
+//         for (i = 0; i < ja4->sigalgs_sz; ++i)
+//         {
+//             int n = ngx_snprintf(out->data + cur, 6, "%s,", sigalgs_copy[i]) - out->data - cur;
+//             cur += n;
+//         }
+//         cur--; // Remove the trailing comma
+//     }
 
-    for (size_t i = 0; i < ja4->sigalgs_sz; ++i) 
-    {
-        free(sigalgs_copy[i]);
-    }
-    free(sigalgs_copy);
+//     for (size_t i = 0; i < ja4->sigalgs_sz; ++i) 
+//     {
+//         free(sigalgs_copy[i]);
+//     }
+//     free(sigalgs_copy);
 
-    // null-terminate the string
-    out->data[cur] = '\0';
-    out->len = cur;
+//     // null-terminate the string
+//     out->data[cur] = '\0';
+//     out->len = cur;
 
-#if (NGX_DEBUG)
-    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, pool->log, 0, "ssl_ja4: fp_string: [%V]\n", out);
-#endif
-}
-static ngx_int_t
-ngx_http_ssl_ja4_string(ngx_http_request_t *r,
-                        ngx_http_variable_value_t *v, uintptr_t data)
-{
-    ngx_ssl_ja4_t ja4;
-    ngx_str_t fp = ngx_null_string;
+// #if (NGX_DEBUG)
+//     ngx_log_debug1(NGX_LOG_DEBUG_EVENT, pool->log, 0, "ssl_ja4: fp_string: [%V]\n", out);
+// #endif
+// }
+// static ngx_int_t
+// ngx_http_ssl_ja4_string(ngx_http_request_t *r,
+//                         ngx_http_variable_value_t *v, uintptr_t data)
+// {
+//     ngx_ssl_ja4_t ja4;
+//     ngx_str_t fp = ngx_null_string;
 
-    if (r->connection == NULL)
-    {
-        return NGX_OK;
-    }
+//     if (r->connection == NULL)
+//     {
+//         return NGX_OK;
+//     }
 
-    if (ngx_ssl_ja4(r->connection, r->pool, &ja4) == NGX_DECLINED)
-    {
-        return NGX_ERROR;
-    }
+//     if (ngx_ssl_ja4(r->connection, r->pool, &ja4) == NGX_DECLINED)
+//     {
+//         return NGX_ERROR;
+//     }
 
-    ngx_ssl_ja4_fp_string(r->pool, &ja4, &fp);
+//     ngx_ssl_ja4_fp_string(r->pool, &ja4, &fp);
 
-    v->data = fp.data;
-    v->len = fp.len;
-    v->valid = 1;
-    v->no_cacheable = 1;
-    v->not_found = 0;
+//     v->data = fp.data;
+//     v->len = fp.len;
+//     v->valid = 1;
+//     v->no_cacheable = 1;
+//     v->not_found = 0;
 
-    return NGX_OK;
-}
+//     return NGX_OK;
+// }
 
 // JA4S
 int ngx_ssl_ja4s(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4s_t *ja4s)
