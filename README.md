@@ -12,7 +12,7 @@ You can quickly test out this module with:
 
 You can also build from source with:
 
-1. `docker build -t ja4-nginx:latest .`
+1. `docker build -t ja4-nginx:source .`
 2. `docker run -p 80:80 -p 443:443 ja4-nginx:source`
 
 ## Docker
