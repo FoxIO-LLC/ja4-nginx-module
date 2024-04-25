@@ -1,7 +1,7 @@
 # this is a reference file for how to use the image hosted on GitHub Container Registry
 services:
   ja4-nginx:
-    image: ghcr.io/foxio-llc/ja4-nginx-module:v1.0.5-beta
+    image: ghcr.io/foxio-llc/ja4-nginx-module:v1.0.7-beta
     ports:
       - "80:80"
       - "443:443"
@@ -11,3 +11,4 @@ services:
       # ssl
       - ../nginx_utils/server.crt:/etc/nginx/conf/server.crt:ro
       - ../nginx_utils/server.key:/etc/nginx/conf/server.key:ro
+      - ../nginx_utils/logs:/etc/nginx/logs

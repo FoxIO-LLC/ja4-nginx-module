@@ -2,8 +2,7 @@ version: "3.8"
 services:
   ja4-nginx:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../
     ports:
       - "80:80"
       - "443:443"
@@ -12,3 +11,4 @@ services:
       - ../nginx_utils/nginx.conf:/etc/nginx/conf/nginx.conf
       - ../nginx_utils/server.crt:/etc/nginx/conf/server.crt
       - ../nginx_utils/server.key:/etc/nginx/conf/server.key
+      - ../nginx_utils/logs:/etc/nginx/logs
