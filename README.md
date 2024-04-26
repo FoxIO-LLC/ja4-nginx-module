@@ -19,7 +19,7 @@ You can also build from source with:
 
 We publish and host Docker images of release versions on GitHub Container Registry. You can pull the image with the following command:
 
-`docker pull ghcr.io/foxio-llc/ja4-nginx-module:v1.0.5-beta`
+`docker pull ghcr.io/foxio-llc/ja4-nginx-module:v1.0.7-beta`
 
 ### Debugging
 
