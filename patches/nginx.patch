@@ -1,50 +1,89 @@
 diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
-index 104e8daf7..bdf0d3064 100644
+index 104e8daf7..9f5200c91 100644
 --- a/src/event/ngx_event_openssl.c
 +++ b/src/event/ngx_event_openssl.c
-@@ -1759,6 +1759,123 @@ ngx_ssl_set_session(ngx_connection_t *c, ngx_ssl_session_t *session)
+@@ -1759,6 +1759,173 @@ ngx_ssl_set_session(ngx_connection_t *c, ngx_ssl_session_t *session)
  }
  
  
 +// adds ciphers to the ssl object for ja4 fingerprint
-+void
++ngx_int_t
 +ngx_SSL_client_features(ngx_connection_t *c) {
 +
-+    unsigned short                *ciphers_out = NULL;
-+    size_t                         len = 0;
 +    SSL                           *s = NULL;
 +
 +    if (c == NULL) {
-+        return;
++        return NGX_ERROR;
 +    }
 +    s = c->ssl->connection;
 +
 +    /* Cipher suites */
 +    c->ssl->ciphers = NULL;
-+    c->ssl->ciphers_sz = SSL_get0_raw_cipherlist(s, &ciphers_out);
-+    // each cipher suite is 2 bytes
-+    c->ssl->ciphers_sz /= 2;
++    STACK_OF(SSL_CIPHER) *ciphers = SSL_get_client_ciphers(s);
 +
-+    if (c->ssl->ciphers_sz && ciphers_out) {
-+        len = c->ssl->ciphers_sz * sizeof(unsigned short);
-+        c->ssl->ciphers = ngx_pnalloc(c->pool, len);
-+        ngx_memcpy(c->ssl->ciphers, ciphers_out, len);
++    if (ciphers == NULL) {
++        return NGX_ERROR; // Handle error
++    }
++
++    c->ssl->ciphers_sz = sk_SSL_CIPHER_num(ciphers);
++
++    if (c->ssl->ciphers_sz) {
++        // Allocate memory for the array of cipher strings
++        c->ssl->ciphers = ngx_pnalloc(c->pool, c->ssl->ciphers_sz * sizeof(char *));
++        if (c->ssl->ciphers == NULL) {
++            return NGX_ERROR; // Handle allocation failure
++        }
++
++        // Convert each cipher suite to a hexadecimal string and store it
++        for (size_t i = 0; i < c->ssl->ciphers_sz; i++) {
++            const SSL_CIPHER *cipher = sk_SSL_CIPHER_value(ciphers, i);
++            if (cipher == NULL) {
++                return NGX_ERROR; // Handle error
++            }
++
++            // Get the two-byte TLS cipher ID in network byte order
++            unsigned char cipher_id_bytes[2];
++            cipher_id_bytes[0] = (SSL_CIPHER_get_id(cipher) >> 8) & 0xFF;
++            cipher_id_bytes[1] = SSL_CIPHER_get_id(cipher) & 0xFF;
++
++            const SSL_CIPHER *found_cipher = SSL_CIPHER_find(s, cipher_id_bytes);
++            if (found_cipher == NULL) {
++                return NGX_ERROR; // Handle error
++            }
++
++            // Convert the cipher ID to a hexadecimal string
++            char hex_str[6]; // Buffer to hold the hexadecimal string (4 digits + null terminator)
++            snprintf(hex_str, sizeof(hex_str), "%02x%02x", cipher_id_bytes[0], cipher_id_bytes[1]);
++
++            // Allocate memory for the hex string and copy it
++            c->ssl->ciphers[i] = ngx_pnalloc(c->pool, sizeof(hex_str));
++            if (c->ssl->ciphers[i] == NULL) {
++                // Handle allocation failure and clean up previously allocated memory
++                for (size_t j = 0; j < i; j++) {
++                    ngx_pfree(c->pool, c->ssl->ciphers[j]);
++                }
++                ngx_pfree(c->pool, c->ssl->ciphers);
++                c->ssl->ciphers = NULL;
++                return NGX_ERROR;
++            }
++            ngx_memcpy(c->ssl->ciphers[i], hex_str, sizeof(hex_str));
++        }
 +    }
 +
 +    /* Signature Algorithms */
-+    int num_sigalgs = SSL_get_sigalgs(s, -1, NULL, NULL, NULL, NULL, NULL);
++    int num_sigalgs = SSL_get_sigalgs(s, 0, NULL, NULL, NULL, NULL, NULL);
 +    if (num_sigalgs > 0) {
 +        // Allocate memory for pointers to strings (each will hold a hex string)
 +        char **sigalgs_hex_strings = ngx_pnalloc(c->pool, num_sigalgs * sizeof(char *));
 +        if (sigalgs_hex_strings == NULL) {
 +            ngx_log_error(NGX_LOG_ERR, c->log, 0, "Failed to allocate memory for signature algorithm hex strings");
-+            return;
++            return NGX_ERROR;
 +        }
 +
 +        for (int i = 0; i < num_sigalgs; ++i) {
 +            int psign, phash, psignhash;
 +            unsigned char rsig, rhash;
-+            SSL_get_shared_sigalgs(s, i, &psign, &phash, &psignhash, &rsig, &rhash);
++            SSL_get_sigalgs(s, i, &psign, &phash, &psignhash, &rsig, &rhash);
 +
 +            // Format as a hexadecimal string
 +            char hex_string[5]; // Enough for "XXXX" + null terminator
@@ -54,7 +93,7 @@ index 104e8daf7..bdf0d3064 100644
 +            sigalgs_hex_strings[i] = ngx_pnalloc(c->pool, sizeof(hex_string));
 +            if (sigalgs_hex_strings[i] == NULL) {
 +                ngx_log_error(NGX_LOG_ERR, c->log, 0, "Failed to allocate memory for a signature algorithm hex string");
-+                continue; // or handle more gracefully
++                return NGX_ERROR;
 +            }
 +
 +            // Copy the hex string into allocated memory
@@ -64,7 +103,9 @@ index 104e8daf7..bdf0d3064 100644
 +        // Save the array of hex strings to your struct
 +        c->ssl->sigalgs_hash_values = sigalgs_hex_strings;
 +    }
++    
 +    c->ssl->sigalgs_sz = num_sigalgs;
++    return NGX_OK;
 +}
 +// adds extensions to the ssl object for ja4 fingerprint
 +int
@@ -91,10 +132,6 @@ index 104e8daf7..bdf0d3064 100644
 +                                                       &ext_out,
 +                                                       &ext_len);
 +
-+    // log extensions
-+    for (size_t i = 0; i < ext_len; i++) {
-+        ngx_log_debug2(NGX_LOG_DEBUG_EVENT, c->log, 0, "ext_out[%z] = %d", i, ext_out[i]);
-+    }
 +    if (!got_extensions) {
 +        return 1;
 +    }
@@ -105,17 +142,30 @@ index 104e8daf7..bdf0d3064 100644
 +        return 1;
 +    }
 +
-+    c->ssl->extensions = ngx_palloc(c->pool, sizeof(unsigned short) * ext_len);
++    c->ssl->extensions = ngx_palloc(c->pool, sizeof(char *) * ext_len);
 +    if (c->ssl->extensions != NULL) {
 +        for (size_t i = 0; i < ext_len; i++) {
-+            c->ssl->extensions[i] = (unsigned short) ext_out[i];
++            char hex_str[6];  // Buffer to hold the hexadecimal string (4 digits + null terminator)
++            snprintf(hex_str, sizeof(hex_str), "%04x", ext_out[i]);
++            
++            // Allocate memory for the hex string and copy it
++            c->ssl->extensions[i] = ngx_pnalloc(c->pool, sizeof(hex_str));
++            if (c->ssl->extensions[i] == NULL) {
++                // Handle allocation failure and clean up previously allocated memory
++                for (size_t j = 0; j < i; j++) {
++                    ngx_pfree(c->pool, c->ssl->extensions[j]);
++                }
++                ngx_pfree(c->pool, c->ssl->extensions);
++                c->ssl->extensions = NULL;
++                return 1;
++            }
++            ngx_memcpy(c->ssl->extensions[i], hex_str, sizeof(hex_str));
 +        }
 +        c->ssl->extensions_sz = ext_len;
 +    }
 +
-+    // now log c->ssl->extensions
 +    for (size_t i = 0; i < ext_len; i++) {
-+        ngx_log_debug2(NGX_LOG_DEBUG_EVENT, c->log, 0, "c->ssl->extensions[%z] = %d", i, c->ssl->extensions[i]);
++        ngx_log_debug2(NGX_LOG_DEBUG_EVENT, c->log, 0, "c->ssl->extensions[%zu] = %s", i, c->ssl->extensions[i]);
 +    }
 +
 +    OPENSSL_free(ext_out);
@@ -126,7 +176,7 @@ index 104e8daf7..bdf0d3064 100644
  ngx_int_t
  ngx_ssl_handshake(ngx_connection_t *c)
  {
-@@ -1778,8 +1895,14 @@ ngx_ssl_handshake(ngx_connection_t *c)
+@@ -1778,12 +1945,16 @@ ngx_ssl_handshake(ngx_connection_t *c)
  
      ngx_ssl_clear_error(c->log);
  
@@ -135,14 +185,18 @@ index 104e8daf7..bdf0d3064 100644
 +
      n = SSL_do_handshake(c->ssl->connection);
  
-+    // ja4 cipher suites
-+    ngx_SSL_client_features(c);
-+
-     ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0, "SSL_do_handshake: %d", n);
+-    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0, "SSL_do_handshake: %d", n);
  
++    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0, "SSL_do_handshake: %d", n);
      if (n == 1) {
+-
++        // ja4 cipher suites
++        ngx_SSL_client_features(c);
+         if (ngx_handle_read_event(c->read, 0) != NGX_OK) {
+             return NGX_ERROR;
+         }
 diff --git a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl.h
-index 860ea26dd..89d6cfc01 100644
+index 860ea26dd..843020703 100644
 --- a/src/event/ngx_event_openssl.h
 +++ b/src/event/ngx_event_openssl.h
 @@ -120,6 +120,24 @@ struct ngx_ssl_connection_s {
@@ -154,10 +208,10 @@ index 860ea26dd..89d6cfc01 100644
 +    int             version;
 +
 +    size_t          ciphers_sz;
-+    unsigned short *ciphers;
++    char **ciphers;
 +
 +    size_t          extensions_sz;
-+    unsigned short *extensions;
++    char **extensions;
 +
 +    size_t          sigalgs_sz;
 +    char   **sigalgs_hash_values; // Array to store combined hash values like 0x0601

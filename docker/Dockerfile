@@ -1,10 +1,9 @@
-# TODO
 FROM alpine
 
 # Define the version as a build argument for easy updates
 ARG NGINX_VERSION=1.24.0
 ARG OPENSSL_VERSION=3.2.1
-ARG JA4_MODULE_VERSION=v1.0.7-beta
+ARG JA4_MODULE_VERSION=v0.9.0-beta
 RUN apk add --no-cache \
     gcc \
     libc-dev \
