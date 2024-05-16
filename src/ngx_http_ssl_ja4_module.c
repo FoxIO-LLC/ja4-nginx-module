@@ -182,24 +182,28 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         qsort(ja4->ciphers, ja4->ciphers_sz, sizeof(char *), compare_hexes);
     }
 
-    // check if we got ciphers
+    // Check if we got ciphers
     if (ja4->ciphers && ja4->ciphers_sz)
     {
         // SHA256_DIGEST_LENGTH should be 32 bytes (256 bits)
         unsigned char hash_result[SHA256_DIGEST_LENGTH];
-        // declare a context structure needed by openssl to compute hash
+        // Declare a context structure needed by OpenSSL to compute hash
         SHA256_CTX sha256;
-        // initialize the context
+        // Initialize the context
         SHA256_Init(&sha256);
 
-        // iterate each cipher and add data to the context
+        // Iterate each cipher and add data to the context
         for (i = 0; i < ja4->ciphers_sz; i++)
         {
-            SHA256_Update(&sha256, &(ja4->ciphers[i]), sizeof(unsigned short));
+            SHA256_Update(&sha256, ja4->ciphers[i], strlen(ja4->ciphers[i]));
+            // Add a comma separator between ciphers
+            if (i < ja4->ciphers_sz - 1)
+            {
+                SHA256_Update(&sha256, ",", 1);
+            }
         }
-        // compute hash, stored in hash_result
+        // Compute hash, stored in hash_result
         SHA256_Final(hash_result, &sha256);
-
         // Convert the hash result to hex
         for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
         {
