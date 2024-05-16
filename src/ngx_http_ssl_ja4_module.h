@@ -169,14 +169,18 @@ ngx_ssl_ja4_is_ext_greased(int id)
     }
     return 0;
 }
-static int compare_ciphers(const void *a, const void *b)
-{
-    unsigned short cipher_a = *(unsigned short *)a;
-    unsigned short cipher_b = *(unsigned short *)b;
 
-    if (cipher_a < cipher_b)
+static int compare_hexes(const void *a, const void *b)
+{
+    const char *ext_a = *(const char **)a;
+    const char *ext_b = *(const char **)b;
+
+    unsigned int hex_a = strtoul(ext_a, NULL, 16);
+    unsigned int hex_b = strtoul(ext_b, NULL, 16);
+
+    if (hex_a < hex_b)
         return -1;
-    if (cipher_a > cipher_b)
+    if (hex_a > hex_b)
         return 1;
     return 0;
 }
