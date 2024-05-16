@@ -346,7 +346,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
 {
     // Calculate memory requirements for output
-    size_t len = 256; // big enough
+    size_t len = 256; // Big enough
 
     out->data = ngx_pnalloc(pool, len);
     if (out->data == NULL)
@@ -359,7 +359,8 @@ void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     size_t cur = 0;
 
     // q for QUIC or t for TCP
-    // out->data[cur++] = (ja4->is_quic) ? 'q' : 't';  // Assuming is_quic is a boolean.
+    // Assuming is_quic is a boolean.
+    // out->data[cur++] = (ja4->is_quic) ? 'q' : 't';
     // TODO: placeholder
     out->data[cur++] = 't';
 
@@ -392,31 +393,33 @@ void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     }
     cur += 2;
 
+    // Add ALPN first value
     if (ja4->alpn_first_value == NULL)
     {
-        ngx_snprintf(out->data + cur, 2, "00");
+        ngx_snprintf(out->data + cur, 3, "00");
     }
     else
     {
-        ngx_snprintf(out->data + cur, 2, "%s", ja4->alpn_first_value);
+        ngx_snprintf(out->data + cur, 3, "%s", ja4->alpn_first_value);
     }
     cur += 2;
 
-    // add underscore
+    // Add underscore
     out->data[cur++] = '_';
 
-    // add cipher hash, 24 character with null terminator
+    // Add cipher hash, 12 characters for truncated hash
     ngx_snprintf(out->data + cur, 13, "%s", ja4->cipher_hash_truncated);
-
     cur += 12;
 
-    // add underscore
+    // Add underscore
     out->data[cur++] = '_';
 
-    // add extension hash, 24 character with null terminator
+    // Add extension hash, 12 characters for truncated hash
     ngx_snprintf(out->data + cur, 13, "%s", ja4->extension_hash_truncated);
+    cur += 12;
 
-    cur += 12; // Adjust the current pointer by 24 chars for the extension
+    // Null-terminate the string
+    out->data[cur] = '\0';
     out->len = cur;
 
 #if (NGX_DEBUG)
