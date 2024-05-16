@@ -233,9 +233,8 @@ ngx_ssl_ja4_detail_print(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 
     for (i = 0; i < ja4->ciphers_sz; ++i)
     {
-        ngx_log_debug2(NGX_LOG_DEBUG_EVENT,
-                       pool->log, 0, "ssl_ja4: |    cipher: 0x%04uxD -> %d",
-                       ja4->ciphers[i],
+        ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
+                       pool->log, 0, "ssl_ja4: |    cipher: %s",
                        ja4->ciphers[i]);
     }
 
@@ -266,9 +265,8 @@ ngx_ssl_ja4_detail_print(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 
     for (i = 0; i < ja4->extensions_sz; ++i)
     {
-        ngx_log_debug2(NGX_LOG_DEBUG_EVENT,
-                       pool->log, 0, "ssl_ja4: |    extension: 0x%04uxD -> %d",
-                       ja4->extensions[i],
+        ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
+                       pool->log, 0, "ssl_ja4: |    extension: %s",
                        ja4->extensions[i]);
     }
 
@@ -276,13 +274,13 @@ ngx_ssl_ja4_detail_print(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
                    pool->log, 0, "ssl_ja4: sigalgs: length: %d\n",
                    ja4->sigalgs_sz);
-    
-    // for (i = 0; i < ja4->sigalgs_sz; ++i)
-    // {
-    //     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
-    //                    pool->log, 0, "ssl_ja4: |    sigalgs: %s",
-    //                    ja4->sigalgs[i]);
-    // }
+
+    for (i = 0; i < ja4->sigalgs_sz; ++i)
+    {
+        ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
+                       pool->log, 0, "ssl_ja4: |    sigalgs: %s",
+                       ja4->sigalgs[i]);
+    }
 
     /* ALPN Values */
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
