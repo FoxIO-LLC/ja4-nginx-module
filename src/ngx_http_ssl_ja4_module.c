@@ -299,32 +299,28 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 
         for (i = 0; i < ja4->extensions_sz; i++)
         {
-            if (SHA256_Update(&sha256, &(ja4->extensions[i]), sizeof(unsigned short)) != 1)
+            SHA256_Update(&sha256, ja4->extensions[i], strlen(ja4->extensions[i]));
+            if (i < ja4->extensions_sz - 1)
             {
-                return NGX_DECLINED;
+                SHA256_Update(&sha256, ",", 1);
             }
         }
 
         if (ja4->sigalgs_sz)
         {
             // add underscore
-            if (SHA256_Update(&sha256, "_", 1) != 1)
-            {
-                return NGX_DECLINED;
-            }
+            SHA256_Update(&sha256, "_", 1);
             for (i = 0; i < ja4->sigalgs_sz; i++)
             {
-                if (SHA256_Update(&sha256, ja4->sigalgs[i], strlen(ja4->sigalgs[i])) != 1)
+                SHA256_Update(&sha256, ja4->sigalgs[i], strlen(ja4->sigalgs[i]));
+                if (i < ja4->sigalgs_sz - 1)
                 {
-                    return NGX_DECLINED;
+                    SHA256_Update(&sha256, ",", 1);
                 }
             }
         }
 
-        if (SHA256_Final(hash_result, &sha256) != 1)
-        {
-            return NGX_DECLINED;
-        }
+        SHA256_Final(hash_result, &sha256);
 
         // Convert the full hash to hexadecimal format
         char hex_hash[2 * SHA256_DIGEST_LENGTH + 1]; // +1 for null-terminator
