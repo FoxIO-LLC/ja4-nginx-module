@@ -132,37 +132,37 @@ typedef struct ngx_ssl_ja4l_s
 #define DTLS1_2_VERSION_STR "DTLSv1.2"
 #define QUICV1_VERSION_STR "QUICv1"
 
-
 /**
  * Grease values to be ignored.
  */
-static const unsigned short GREASE[] = {
-    0x0a0a,
-    0x1a1a,
-    0x2a2a,
-    0x3a3a,
-    0x4a4a,
-    0x5a5a,
-    0x6a6a,
-    0x7a7a,
-    0x8a8a,
-    0x9a9a,
-    0xaaaa,
-    0xbaba,
-    0xcaca,
-    0xdada,
-    0xeaea,
-    0xfafa,
+static const char *GREASE[] = {
+    "0a0a",
+    "1a1a",
+    "2a2a",
+    "3a3a",
+    "4a4a",
+    "5a5a",
+    "6a6a",
+    "7a7a",
+    "8a8a",
+    "9a9a",
+    "aaaa",
+    "baba",
+    "caca",
+    "dada",
+    "eaea",
+    "fafa",
+    "0010", // ALPN IGNORE
 };
 
 // HELPERS
 static int
-ngx_ssl_ja4_is_ext_greased(int id)
+ngx_ssl_ja4_is_ext_greased(const char *ext)
 {
     size_t i;
     for (i = 0; i < (sizeof(GREASE) / sizeof(GREASE[0])); ++i)
     {
-        if (id == GREASE[i])
+        if (strcmp(ext, GREASE[i]) == 0)
         {
             return 1;
         }
