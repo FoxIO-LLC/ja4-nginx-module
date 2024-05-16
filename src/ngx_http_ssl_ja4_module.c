@@ -260,7 +260,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     ja4->sigalgs_sz = 0;
     if (c->ssl->sigalgs_sz && c->ssl->sigalgs_hash_values)
     {
-        len = c->ssl->sigalgs_sz * sizeof(unsigned short);
+        len = c->ssl->sigalgs_sz * sizeof(char *);
         ja4->sigalgs = ngx_pnalloc(pool, len);
         if (ja4->sigalgs == NULL)
         {
@@ -268,10 +268,25 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         }
         for (i = 0; i < c->ssl->sigalgs_sz; ++i)
         {
-            ja4->sigalgs[ja4->sigalgs_sz++] = c->ssl->sigalgs_hash_values[i];
+            size_t sigalg_len = strlen(c->ssl->sigalgs_hash_values[i]) + 1; // +1 for null terminator
+
+            // Allocate memory for the signature algorithm string and copy it
+            ja4->sigalgs[ja4->sigalgs_sz] = ngx_pnalloc(pool, sigalg_len);
+            if (ja4->sigalgs[ja4->sigalgs_sz] == NULL)
+            {
+                // Handle allocation failure and clean up previously allocated memory
+                for (size_t j = 0; j < ja4->sigalgs_sz; j++)
+                {
+                    ngx_pfree(pool, ja4->sigalgs[j]);
+                }
+                ngx_pfree(pool, ja4->sigalgs);
+                ja4->sigalgs = NULL;
+                return NGX_DECLINED;
+            }
+            ngx_memcpy(ja4->sigalgs[ja4->sigalgs_sz], c->ssl->sigalgs_hash_values[i], sigalg_len);
+            ja4->sigalgs_sz++;
         }
     }
-
 
     if (ja4->extensions && ja4->extensions_sz)
     {
