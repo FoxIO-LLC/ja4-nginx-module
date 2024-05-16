@@ -221,7 +221,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     ja4->extensions_sz = 0;
     if (c->ssl->extensions_sz && c->ssl->extensions)
     {
-        len = c->ssl->extensions_sz * sizeof(unsigned short);
+        len = c->ssl->extensions_sz * sizeof(char *);
         ja4->extensions = ngx_pnalloc(pool, len);
         if (ja4->extensions == NULL)
         {
@@ -231,11 +231,28 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         {
             if (!ngx_ssl_ja4_is_ext_greased(c->ssl->extensions[i]))
             {
-                ja4->extensions[ja4->extensions_sz++] = c->ssl->extensions[i];
+                char *ext = c->ssl->extensions[i];
+                size_t ext_len = strlen(ext) + 1; // +1 for null terminator
+
+                // Allocate memory for the extension string and copy it
+                ja4->extensions[ja4->extensions_sz] = ngx_pnalloc(pool, ext_len);
+                if (ja4->extensions[ja4->extensions_sz] == NULL)
+                {
+                    // Handle allocation failure and clean up previously allocated memory
+                    for (size_t j = 0; j < ja4->extensions_sz; j++)
+                    {
+                        ngx_pfree(pool, ja4->extensions[j]);
+                    }
+                    ngx_pfree(pool, ja4->extensions);
+                    ja4->extensions = NULL;
+                    return NGX_DECLINED;
+                }
+                ngx_memcpy(ja4->extensions[ja4->extensions_sz], ext, ext_len);
+                ja4->extensions_sz++;
             }
         }
         /* Now, let's sort the ja4->extensions array */
-        qsort(ja4->extensions, ja4->extensions_sz, sizeof(unsigned short), compare_ciphers);
+        qsort(ja4->extensions, ja4->extensions_sz, sizeof(char *), compare_hexes);
     }
 
     // signature algorithms
