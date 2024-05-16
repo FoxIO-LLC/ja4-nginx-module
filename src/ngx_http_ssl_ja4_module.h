@@ -152,6 +152,7 @@ static const char *GREASE[] = {
     "eaea",
     "fafa",
     "0010", // ALPN IGNORE
+    "0000", // SNI IGNORE
 };
 
 // HELPERS
