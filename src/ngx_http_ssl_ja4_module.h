@@ -12,15 +12,14 @@ typedef struct ngx_ssl_ja4_s
 
     unsigned char has_sni; // 'd' if SNI is present, 'i' otherwise
 
-    size_t ciphers_sz;       // Count of ciphers
-    unsigned short *ciphers; // List of ciphers
+    size_t ciphers_sz; // Count of ciphers
+    char **ciphers;    // List of ciphers
 
-    size_t extensions_sz;       // Count of extensions
-    unsigned short *extensions; // List of extensions
+    size_t extensions_sz; // Count of extensions
+    char **extensions;    // List of extensions
 
-    size_t sigalgs_sz;       // Count of signature algorithms
-    char **sigalgs; // List of signature algorithms
-
+    size_t sigalgs_sz; // Count of signature algorithms
+    char **sigalgs;    // List of signature algorithms
 
     // For the first and last ALPN extension values
     char *alpn_first_value;
