@@ -70,14 +70,12 @@ static ngx_http_variable_t ngx_http_ssl_ja4_variables_list[] = {
 };
 
 // FUNCTIONS
-
 int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 {
     // this function sets stuff on the ja4 struct so the fingerprint can easily, and clearly be formed in a separate function
     SSL *ssl;
     size_t i;
     size_t len = 0;
-    unsigned short us = 0;
 
     if (!c->ssl)
     {
@@ -98,7 +96,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     // TODO: Need to detect QUIC
     // 1. Determine the transport protocol:
     // (This is a placeholder and might need to be replaced depending on how you determine the protocol in your environment.)
-    ja4->transport = 't'; // Assuming default is TCP.
+    ja4->transport = 't'; // default is TCP.
 
     // TODO: verify this
     // 2. Determine if SNI is present or not:
@@ -144,34 +142,44 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     ja4->ciphers = NULL;
     ja4->ciphers_sz = 0;
     /*
-    Allocate memory for and populate a list of ciphers from 'c->ssl->ciphers',
-    excluding any GREASE values. The resulting ciphers are stored in host byte
+    Allocate memory for and populate a list of ciphers from 'c->ssl->ciphers'.
+    The resulting ciphers are stored in host byte
     order in 'ja4->ciphers'. If memory allocation fails, the function returns NGX_DECLINED.
     */
     if (c->ssl->ciphers && c->ssl->ciphers_sz)
     {
-        // total length required to store all ciphers
-        len = c->ssl->ciphers_sz * sizeof(unsigned short);
-
-        // allocate memory
+        // Allocate memory for the array of cipher strings
+        len = c->ssl->ciphers_sz * sizeof(char *);
         ja4->ciphers = ngx_pnalloc(pool, len);
         if (ja4->ciphers == NULL)
         {
             return NGX_DECLINED;
         }
-        /* Filter out GREASE extensions */
+
+        // Add c->ssl->ciphers to ja4->ciphers
         for (i = 0; i < c->ssl->ciphers_sz; ++i)
         {
-            // convert cipher from network byte order to host byte order
-            us = ntohs(c->ssl->ciphers[i]);
-            // if not a grease value, add it to the list of ciphers
-            if (!ngx_ssl_ja4_is_ext_greased(us))
+            size_t hex_str_len = strlen(c->ssl->ciphers[i]) + 1; // +1 for null terminator
+
+            // Allocate memory for the hex string and copy it
+            ja4->ciphers[ja4->ciphers_sz] = ngx_pnalloc(pool, hex_str_len);
+            if (ja4->ciphers[ja4->ciphers_sz] == NULL)
             {
-                ja4->ciphers[ja4->ciphers_sz++] = us;
+                // Handle allocation failure and clean up previously allocated memory
+                for (size_t j = 0; j < ja4->ciphers_sz; j++)
+                {
+                    ngx_pfree(pool, ja4->ciphers[j]);
+                }
+                ngx_pfree(pool, ja4->ciphers);
+                ja4->ciphers = NULL;
+                return NGX_DECLINED;
             }
+            ngx_memcpy(ja4->ciphers[ja4->ciphers_sz], c->ssl->ciphers[i], hex_str_len);
+            ja4->ciphers_sz++;
         }
+
         /* Now, let's sort the ja4->ciphers array */
-        qsort(ja4->ciphers, ja4->ciphers_sz, sizeof(unsigned short), compare_ciphers);
+        qsort(ja4->ciphers, ja4->ciphers_sz, sizeof(char *), compare_hexes);
     }
 
     // check if we got ciphers
