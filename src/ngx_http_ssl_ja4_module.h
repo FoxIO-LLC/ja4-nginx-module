@@ -2,7 +2,6 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 
-
 // STRUCTS
 typedef struct ngx_ssl_ja4_s
 {
@@ -15,8 +14,9 @@ typedef struct ngx_ssl_ja4_s
     size_t ciphers_sz; // Count of ciphers
     char **ciphers;    // List of ciphers
 
-    size_t extensions_sz; // Count of extensions
-    char **extensions;    // List of extensions
+    size_t extensions_count; // Count of signature algorithms
+    size_t extensions_sz;    // Count of extensions
+    char **extensions;       // List of extensions
 
     size_t sigalgs_sz; // Count of signature algorithms
     char **sigalgs;    // List of signature algorithms
@@ -120,7 +120,6 @@ typedef struct ngx_ssl_ja4l_s
     uint8_t hop_count;                         // a whole number - max is less than 255
 } ngx_ssl_ja4l_t;
 
-
 // CONSTANTS
 #define SSL3_VERSION_STR "SSLv3"
 #define TLS1_VERSION_STR "TLSv1"
@@ -151,11 +150,28 @@ static const char *GREASE[] = {
     "dada",
     "eaea",
     "fafa",
+};
+
+static const char *EXT_IGNORE[] = {
     "0010", // ALPN IGNORE
     "0000", // SNI IGNORE
 };
 
 // HELPERS
+
+static int ngx_ssl_ja4_is_ext_ignored(const char *ext)
+{
+    size_t i;
+    for (i = 0; i < (sizeof(EXT_IGNORE) / sizeof(EXT_IGNORE[0])); ++i)
+    {
+        if (strcmp(ext, EXT_IGNORE[i]) == 0)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int
 ngx_ssl_ja4_is_ext_greased(const char *ext)
 {
@@ -265,7 +281,7 @@ ngx_ssl_ja4_detail_print(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     /* Extensions */
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
                    pool->log, 0, "ssl_ja4: extensions: length: %d\n",
-                   ja4->extensions_sz);
+                   ja4->extensions_count);
 
     for (i = 0; i < ja4->extensions_sz; ++i)
     {
@@ -292,7 +308,6 @@ ngx_ssl_ja4_detail_print(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                    ja4->alpn_first_value);
 }
 #endif
-
 
 // FUNCTION PROTOTYPES
 // INIT
@@ -337,7 +352,6 @@ static ngx_int_t ngx_http_ssl_ja4ts(ngx_http_request_t *r, ngx_http_variable_val
 // JA4TS STRING
 void ngx_ssl_ja4ts_fp_string(ngx_pool_t *pool, ngx_ssl_ja4ts_t *ja4ts, ngx_str_t *out);
 static ngx_int_t ngx_http_ssl_ja4ts_string(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
-
 
 // JA4X
 int ngx_ssl_ja4x(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4x_t *ja4x);

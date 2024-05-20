@@ -219,6 +219,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     /* Extensions */
     ja4->extensions = NULL;
     ja4->extensions_sz = 0;
+    ja4->extensions_count = 0;
     if (c->ssl->extensions_sz && c->ssl->extensions)
     {
         len = c->ssl->extensions_sz * sizeof(char *);
@@ -231,6 +232,12 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         {
             if (!ngx_ssl_ja4_is_ext_greased(c->ssl->extensions[i]))
             {
+                ja4->extensions_count++;
+                if (ngx_ssl_ja4_is_ext_ignored(c->ssl->extensions[i]))
+                {
+                    // don't consider in list of extensions, but still count it
+                    continue;
+                }
                 char *ext = c->ssl->extensions[i];
                 size_t ext_len = strlen(ext) + 1; // +1 for null terminator
 
@@ -383,13 +390,13 @@ void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     cur += 2;
 
     // 2 character count of extensions
-    if (ja4->extensions_sz == 0)
+    if (ja4->extensions_count == 0)
     {
         ngx_snprintf(out->data + cur, 3, "00");
     }
     else
     {
-        ngx_snprintf(out->data + cur, 3, "%02zu", ja4->extensions_sz);
+        ngx_snprintf(out->data + cur, 3, "%02zu", ja4->extensions_count);
     }
     cur += 2;
 
@@ -442,7 +449,7 @@ ngx_http_ssl_ja4(ngx_http_request_t *r,
     {
         return NGX_ERROR;
     }
- 
+
     ngx_ssl_ja4_fp(r->pool, &ja4, &fp);
 
     v->data = fp.data;
@@ -525,13 +532,13 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     cur += 2;
 
     // 2 character count of extensions
-    if (ja4->extensions_sz == 0)
+    if (ja4->extensions_count == 0)
     {
         ngx_snprintf(out->data + cur, 3, "00");
     }
     else
     {
-        ngx_snprintf(out->data + cur, 3, "%02zu", ja4->extensions_sz);
+        ngx_snprintf(out->data + cur, 3, "%02zu", ja4->extensions_count);
     }
     cur += 2;
 
