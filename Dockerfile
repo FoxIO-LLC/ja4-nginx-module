@@ -1,4 +1,3 @@
-# TODO
 FROM alpine
 
 # Define the version as a build argument for easy updates
