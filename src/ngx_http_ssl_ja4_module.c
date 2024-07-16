@@ -271,7 +271,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                     continue;
                 }
                 // check if the extension is not a PSK extension
-                if (ngx_ssl_ja4_is_ext_no_psk(c->ssl->extensions[i]))
+                if (ngx_ssl_ja4_is_ext_psk(c->ssl->extensions[i]))
                 {
                     // Allocate memory for the extension string and copy it
                     ja4->extensions_no_psk[ja4->extensions_no_psk_count] = ngx_pnalloc(pool, ext_len);
@@ -412,7 +412,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         {
             sprintf(hex_hash + 2 * i, "%02x", hash_result[i]);
         }
-        ngx_memcpy(ja4->extension_no_psk_hash, hex_hash, 2 * SHA256_DIGEST_LENGTH);
+        ngx_memcpy(ja4->extension_hash_no_psk, hex_hash, 2 * SHA256_DIGEST_LENGTH);
 
         // Convert the truncated hash to hexadecimal format
         char hex_hash_truncated[2 * 6 + 1]; // 6 bytes, 2 characters each = 12 characters plus null-terminator
@@ -421,8 +421,8 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
             sprintf(hex_hash_truncated + 2 * i, "%02x", hash_result[i]);
         }
         // Copy the first 6 bytes (12 characters) for the truncated hash
-        ngx_memcpy(ja4->extension_no_psk_hash_truncated, hex_hash_truncated, 12);
-        ja4->extension_no_psk_hash_truncated[12] = '\0';
+        ngx_memcpy(ja4->extension_hash_no_psk_truncated, hex_hash_truncated, 12);
+        ja4->extension_hash_no_psk_truncated[12] = '\0';
     }
     return NGX_OK;
 }
@@ -721,9 +721,90 @@ ngx_http_ssl_ja4_string(ngx_http_request_t *r,
 }
 
 // JA4ONE
-int ngx_ssl_ja4one(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4one_t *ja4one)
+int ngx_ssl_ja4one(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
 {
-    // this function sets stuff on the ja4one struct so the fingerprint can easily, and clearly be formed in a separate function
+    // this function uses stuff on the ja4 struct to create a ja4one fingerprint
+    // Calculate memory requirements for output
+    size_t len = 256; // Big enough
+
+    out->data = ngx_pnalloc(pool, len);
+    if (out->data == NULL)
+    {
+        out->len = 0;
+        return;
+    }
+    out->len = len;
+
+    size_t cur = 0;
+
+    // q for QUIC or t for TCP
+    // Assuming is_quic is a boolean.
+    // out->data[cur++] = (ja4->is_quic) ? 'q' : 't';
+    // TODO: placeholder
+    out->data[cur++] = 't';
+
+    // 2 character TLS version
+    memcpy(out->data + cur, ja4->version, 2);
+    cur += 2;
+
+    // SNI = d, no SNI = i
+    out->data[cur++] = ja4->has_sni;
+
+    // 2 character count of ciphers
+    if (ja4->ciphers_sz == 0)
+    {
+        ngx_snprintf(out->data + cur, 3, "00");
+    }
+    else
+    {
+        ngx_snprintf(out->data + cur, 3, "%02zu", ja4->ciphers_sz);
+    }
+    cur += 2;
+
+    // 2 character count of extensions
+    if (ja4->extensions_count == 0)
+    {
+        ngx_snprintf(out->data + cur, 3, "00");
+    }
+    else
+    {
+        ngx_snprintf(out->data + cur, 3, "%02zu", ja4->extensions_no_psk_count);
+    }
+    cur += 2;
+
+    // Add ALPN first value
+    if (ja4->alpn_first_value == NULL)
+    {
+        ngx_snprintf(out->data + cur, 3, "00");
+    }
+    else
+    {
+        ngx_snprintf(out->data + cur, 3, "%s", ja4->alpn_first_value);
+    }
+    cur += 2;
+
+    // Add underscore
+    out->data[cur++] = '_';
+
+    // Add cipher hash, 12 characters for truncated hash
+    ngx_snprintf(out->data + cur, 13, "%s", ja4->cipher_hash_truncated);
+    cur += 12;
+
+    // Add underscore
+    out->data[cur++] = '_';
+
+    // Add extension hash, 12 characters for truncated hash
+    ngx_snprintf(out->data + cur, 13, "%s", ja4->extension_hash_no_psk_truncated);
+    cur += 12;
+
+    // Null-terminate the string
+    out->data[cur] = '\0';
+    out->len = cur;
+
+#if (NGX_DEBUG)
+    ngx_ssl_ja4_detail_print(pool, ja4);
+    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, pool->log, 0, "ssl_ja4: fp: [%V]\n", out);
+#endif
 }
 
 // JA4S
