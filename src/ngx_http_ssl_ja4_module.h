@@ -14,9 +14,17 @@ typedef struct ngx_ssl_ja4_s
     size_t ciphers_sz; // Count of ciphers
     char **ciphers;    // List of ciphers
 
-    size_t extensions_count; // Count of signature algorithms
-    size_t extensions_sz;    // Count of extensions
+    size_t extensions_count; // Count of extensions including ignored extensions (ALPN, SNI)
+    size_t extensions_sz;    // Count of extensions NOT including ignored extensions (ALPN, SNI), for mem alloc etc
     char **extensions;       // List of extensions
+
+    // JA4one
+    char **extensions_no_psk;    // List of extensions including GREASE values
+    size_t extensions_no_psk_count; // Count of extensions including GREASE values
+    
+    // this hash does not include signature algorithms for the time being
+    char extension_hash_no_psk[65];           // Full SHA256 hash (32 bytes * 2 characters/byte + 1 for '\0')
+    char extension_hash_no_psk_truncated[13]; // Truncated SHA256 hash (12 bytes * 2 characters/byte + 1 for '\0')
 
     size_t sigalgs_sz; // Count of signature algorithms
     char **sigalgs;    // List of signature algorithms
@@ -152,12 +160,20 @@ static const char *GREASE[] = {
     "fafa",
 };
 
+ // TLS extension 41 "pre_shared_key", ignore, we care about software proxy of client not things it has done before
+static const char *EXT_IGNORE_PSK = "0029";
+
 static const char *EXT_IGNORE[] = {
     "0010", // ALPN IGNORE
     "0000", // SNI IGNORE
 };
 
 // HELPERS
+
+static int ngx_ssl_ja4_is_ext_psk(const char *ext)
+{
+    return strcmp(ext, EXT_IGNORE_PSK) == 0;
+}
 
 static int ngx_ssl_ja4_is_ext_ignored(const char *ext)
 {
