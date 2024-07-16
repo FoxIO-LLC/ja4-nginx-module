@@ -22,6 +22,10 @@ static ngx_http_variable_t ngx_http_ssl_ja4_variables_list[] = {
      NULL,
      ngx_http_ssl_ja4_string,
      0, 0, 0},
+    {ngx_string("http_ssl_ja4one"),
+     NULL,
+     ngx_http_ssl_ja4one,
+     0, 0, 0},
     {ngx_string("http_ssl_ja4s"),
      NULL,
      ngx_http_ssl_ja4s,
@@ -231,6 +235,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     {
         len = c->ssl->extensions_sz * sizeof(char *);
         ja4->extensions = ngx_pnalloc(pool, len);
+        ja4->extensions_no_psk = ngx_pnalloc(pool, len);
         if (ja4->extensions == NULL)
         {
             return NGX_DECLINED;
@@ -271,7 +276,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                     continue;
                 }
                 // check if the extension is not a PSK extension
-                if (ngx_ssl_ja4_is_ext_psk(c->ssl->extensions[i]))
+                if (!ngx_ssl_ja4_is_ext_psk(c->ssl->extensions[i]))
                 {
                     // Allocate memory for the extension string and copy it
                     ja4->extensions_no_psk[ja4->extensions_no_psk_count] = ngx_pnalloc(pool, ext_len);
@@ -295,6 +300,8 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         /* Now, let's sort the ja4->extensions array */
         // what is going on with the mem alloc in these arguments...
         qsort(ja4->extensions, ja4->extensions_sz, sizeof(char *), compare_hexes);
+        // sort extensions_no_psk
+        qsort(ja4->extensions_no_psk, ja4->extensions_no_psk_count, sizeof(char *), compare_hexes);
     }
 
     // signature algorithms
@@ -389,24 +396,25 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     if (ja4->extensions_no_psk && ja4->extensions_no_psk_count)
     {
         unsigned char hash_result[SHA256_DIGEST_LENGTH];
-        SHA256_CTX sha256;
-        if (SHA256_Init(&sha256) != 1)
+        SHA256_CTX sha256_psk;
+        if (SHA256_Init(&sha256_psk) != 1)
         {
             return NGX_DECLINED;
         }
 
         for (i = 0; i < ja4->extensions_no_psk_count; i++)
         {
-            SHA256_Update(&sha256, ja4->extensions_no_psk[i], strlen(ja4->extensions_no_psk[i]));
+            SHA256_Update(&sha256_psk, ja4->extensions_no_psk[i], strlen(ja4->extensions_no_psk[i]));
+            // add comma separator if not last val
             if (i < ja4->extensions_no_psk_count - 1)
             {
-                SHA256_Update(&sha256, ",", 1);
+                SHA256_Update(&sha256_psk, ",", 1);
             }
         }
 
-        SHA256_Final(hash_result, &sha256);
+        SHA256_Final(hash_result, &sha256_psk);
 
-        // Convert the full hash to hexadecimal format
+        // Convert the full hash to hexadecimal (human readable) format
         char hex_hash[2 * SHA256_DIGEST_LENGTH + 1]; // +1 for null-terminator
         for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
         {
@@ -526,13 +534,6 @@ ngx_http_ssl_ja4(ngx_http_request_t *r,
     {
         return NGX_ERROR;
     }
-
-    // get session id from cookies
-    // check "database"
-    // if more than one ja4 fingerprint for this session_id
-    // kill connection
-    // revoke session token with okta api
-    // return NGX_ERROR
 
     ngx_ssl_ja4_fp(r->pool, &ja4, &fp);
 
@@ -721,7 +722,8 @@ ngx_http_ssl_ja4_string(ngx_http_request_t *r,
 }
 
 // JA4ONE
-int ngx_ssl_ja4one(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
+// creates fp
+void ngx_ssl_ja4one_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
 {
     // this function uses stuff on the ja4 struct to create a ja4one fingerprint
     // Calculate memory requirements for output
@@ -805,6 +807,33 @@ int ngx_ssl_ja4one(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     ngx_ssl_ja4_detail_print(pool, ja4);
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT, pool->log, 0, "ssl_ja4: fp: [%V]\n", out);
 #endif
+}
+// assigns fp to variable
+static ngx_int_t
+ngx_http_ssl_ja4one(ngx_http_request_t *r,
+                     ngx_http_variable_value_t *v, uintptr_t data)
+{
+    ngx_ssl_ja4_t ja4;
+    ngx_str_t fp = ngx_null_string;
+
+    if (r->connection == NULL)
+    {
+        return NGX_OK;
+    }
+    if (ngx_ssl_ja4(r->connection, r->pool, &ja4) == NGX_DECLINED)
+    {
+        return NGX_ERROR;
+    }
+
+    ngx_ssl_ja4one_fp(r->pool, &ja4, &fp);
+
+    v->data = fp.data;
+    v->len = fp.len;
+    v->valid = 1;
+    v->no_cacheable = 1;
+    v->not_found = 0;
+
+    return NGX_OK;
 }
 
 // JA4S

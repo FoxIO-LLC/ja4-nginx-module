@@ -14,14 +14,16 @@ typedef struct ngx_ssl_ja4_s
     size_t ciphers_sz; // Count of ciphers
     char **ciphers;    // List of ciphers
 
+    // size according to ja4 spec, can be 1-2 larger than extensions_sz
     size_t extensions_count; // Count of extensions including ignored extensions (ALPN, SNI)
-    size_t extensions_sz;    // Count of extensions NOT including ignored extensions (ALPN, SNI), for mem alloc etc
-    char **extensions;       // List of extensions
+    // actual size of extensions array
+    size_t extensions_sz; // Count of extensions NOT including ignored extensions (ALPN, SNI), for mem alloc etc
+    char **extensions;    // List of extensions
 
     // JA4one
-    char **extensions_no_psk;    // List of extensions including GREASE values
     size_t extensions_no_psk_count; // Count of extensions including GREASE values
-    
+    char **extensions_no_psk;       // List of extensions including GREASE values
+
     // this hash does not include signature algorithms for the time being
     char extension_hash_no_psk[65];           // Full SHA256 hash (32 bytes * 2 characters/byte + 1 for '\0')
     char extension_hash_no_psk_truncated[13]; // Truncated SHA256 hash (12 bytes * 2 characters/byte + 1 for '\0')
@@ -160,7 +162,7 @@ static const char *GREASE[] = {
     "fafa",
 };
 
- // TLS extension 41 "pre_shared_key", ignore, we care about software proxy of client not things it has done before
+// TLS extension 41 "pre_shared_key", ignore, we care about software proxy of client not things it has done before
 static const char *EXT_IGNORE_PSK = "0029";
 
 static const char *EXT_IGNORE[] = {
@@ -294,6 +296,16 @@ ngx_ssl_ja4_detail_print(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                    pool->log, 0, "ssl_ja4: extension hash truncated: %s\n",
                    ja4->extension_hash_truncated);
 
+    // extension hash no psk
+    ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
+                   pool->log, 0, "ssl_ja4: extension hash no psk: %s\n",
+                   ja4->extension_hash_no_psk);
+
+    // extension hash no psk truncated
+    ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
+                   pool->log, 0, "ssl_ja4: extension hash no psk truncated: %s\n",
+                   ja4->extension_hash_no_psk_truncated);
+
     /* Extensions */
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
                    pool->log, 0, "ssl_ja4: extensions: length: %d\n",
@@ -304,6 +316,18 @@ ngx_ssl_ja4_detail_print(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
                        pool->log, 0, "ssl_ja4: |    extension: %s",
                        ja4->extensions[i]);
+    }
+
+    /* Extensions no PSK */
+    ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
+                   pool->log, 0, "ssl_ja4: extensions_no_psk: length: %d\n",
+                   ja4->extensions_no_psk_count);
+
+    for (i = 0; i < ja4->extensions_no_psk_count; ++i)
+    {
+        ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
+                       pool->log, 0, "ssl_ja4: |    extension_no_psk: %s",
+                       ja4->extensions_no_psk[i]);
     }
 
     // Signature Algorithms
