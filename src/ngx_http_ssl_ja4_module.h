@@ -162,8 +162,11 @@ static const char *GREASE[] = {
     "fafa",
 };
 
-// TLS extension 41 "pre_shared_key", ignore, we care about software proxy of client not things it has done before
-static const char *EXT_IGNORE_PSK = "0029";
+// TLS extensions that clients might change from request to request
+static const char *EXT_IGNORE_DYNAMIC[] = {
+    "0029", // PRE_SHARED_KEY, session resumption
+    "0015", // PADDING, padding extension not always included
+};
 
 static const char *EXT_IGNORE[] = {
     "0010", // ALPN IGNORE
@@ -172,9 +175,17 @@ static const char *EXT_IGNORE[] = {
 
 // HELPERS
 
-static int ngx_ssl_ja4_is_ext_psk(const char *ext)
+static int ngx_ssl_ja4_is_ext_dynamic(const char *ext)
 {
-    return strcmp(ext, EXT_IGNORE_PSK) == 0;
+    size_t i;
+    for (i = 0; i < (sizeof(EXT_IGNORE_DYNAMIC) / sizeof(EXT_IGNORE_DYNAMIC[0])); ++i)
+    {
+        if (strcmp(ext, EXT_IGNORE_DYNAMIC[i]) == 0)
+        {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 static int ngx_ssl_ja4_is_ext_ignored(const char *ext)

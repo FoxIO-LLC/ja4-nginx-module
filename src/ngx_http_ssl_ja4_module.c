@@ -276,7 +276,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                     continue;
                 }
                 // check if the extension is not a PSK extension
-                if (!ngx_ssl_ja4_is_ext_psk(c->ssl->extensions[i]))
+                if (!ngx_ssl_ja4_is_ext_dynamic(c->ssl->extensions[i]))
                 {
                     // Allocate memory for the extension string and copy it
                     ja4->extensions_no_psk[ja4->extensions_no_psk_count] = ngx_pnalloc(pool, ext_len);
@@ -811,7 +811,7 @@ void ngx_ssl_ja4one_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
 // assigns fp to variable
 static ngx_int_t
 ngx_http_ssl_ja4one(ngx_http_request_t *r,
-                     ngx_http_variable_value_t *v, uintptr_t data)
+                    ngx_http_variable_value_t *v, uintptr_t data)
 {
     ngx_ssl_ja4_t ja4;
     ngx_str_t fp = ngx_null_string;
