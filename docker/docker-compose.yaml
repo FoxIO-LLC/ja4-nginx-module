@@ -1,5 +1,6 @@
 services:
   ja4-nginx:
+    container_name: ja4-nginx
     build:
       context: ../
     ports:

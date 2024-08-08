@@ -1,5 +1,6 @@
 services:
   ja4-nginx-modsec:
+    container_name: ja4-nginx-modsec
     build:
       context: .
       dockerfile: Dockerfile.modsec
