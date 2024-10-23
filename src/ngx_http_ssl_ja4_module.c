@@ -485,16 +485,20 @@ void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     }
     cur += 2;
 
-    // Add ALPN first value
-    if (ja4->alpn_first_value == NULL)
+    // Add ALPN first and last value
+    if (ja4->alpn_first_value == NULL || ngx_strlen(ja4->alpn_first_value) < 2)
     {
-        ngx_snprintf(out->data + cur, 3, "00");
+        ngx_snprintf(out->data + cur, 3, "00");  // Default to "00" if null or too short
     }
     else
     {
-        ngx_snprintf(out->data + cur, 3, "%s", ja4->alpn_first_value);
+        // Get the first and last character from ja4->alpn_first_value
+        char first = ja4->alpn_first_value[0];
+        char last = ja4->alpn_first_value[ngx_strlen(ja4->alpn_first_value) - 1];
+        ngx_snprintf(out->data + cur, 3, "%c%c", first, last);  // Format them into out->data
     }
     cur += 2;
+
 
     // Add underscore
     out->data[cur++] = '_';
