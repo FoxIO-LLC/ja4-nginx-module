@@ -2,7 +2,7 @@
 services:
   ja4-nginx:
     container_name: ja4-nginx
-    image: ghcr.io/foxio-llc/ja4-nginx-module:v1.2.1-beta
+    image: ghcr.io/foxio-llc/ja4-nginx-module:v1.3.0-beta
     ports:
       - "80:80"
       - "443:443"

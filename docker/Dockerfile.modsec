@@ -2,7 +2,7 @@
 FROM alpine
 
 # Define the versions as a build argument for easy updates
-ARG VERSION=v1.2.1-beta
+ARG VERSION=v1.3.0-beta
 ARG NGINX_VERSION=1.25.0
 ARG MODSECURITY_VERSION=v3.0.6
 ARG MODSECURITY_NGINX_VERSION=v1.0.3
