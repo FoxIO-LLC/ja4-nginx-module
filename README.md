@@ -44,6 +44,7 @@ Manually upload the tar.gz file and the sha256sum
 
 Update the file `docker/Dockerfile` to pull from the most recently published release. Then build and tag the image:
 `cd docker`
+READ BELOW
 UPDATE JA4_MODULE_VERSION IN DOCKERFILE TO BUILD FROM NEW RELEASE
 `docker build -t ghcr.io/foxio-llc/ja4-nginx-module:vx.y.z-beta .`
 

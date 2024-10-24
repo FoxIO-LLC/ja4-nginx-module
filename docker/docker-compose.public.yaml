@@ -1,4 +1,4 @@
-# this is a reference file for how to use the image hosted on GitHub Container Registry
+# this is a reference file for how to use the ja4-nginx-module image hosted on GitHub Container Registry
 services:
   ja4-nginx:
     container_name: ja4-nginx
