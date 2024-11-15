@@ -131,14 +131,15 @@ typedef struct ngx_ssl_ja4l_s
 } ngx_ssl_ja4l_t;
 
 // CONSTANTS
-#define SSL3_VERSION_STR "SSLv3"
-#define TLS1_VERSION_STR "TLSv1"
-#define TLS1_1_VERSION_STR "TLSv1.1"
-#define TLS1_2_VERSION_STR "TLSv1.2"
-#define TLS1_3_VERSION_STR "TLSv1.3"
-#define DTLS1_VERSION_STR "DTLSv1"
-#define DTLS1_2_VERSION_STR "DTLSv1.2"
-#define QUICV1_VERSION_STR "QUICv1"
+#define SSL3_VERSION_INT    0x0300
+#define TLS1_VERSION_INT    0x0301
+#define TLS1_1_VERSION_INT  0x0302
+#define TLS1_2_VERSION_INT  0x0303
+#define TLS1_3_VERSION_INT  0x0304
+#define DTLS1_VERSION_INT   0xFEFF
+#define DTLS1_2_VERSION_INT 0xFEFD
+#define QUICV1_VERSION_INT  0x0001
+
 
 /**
  * Grease values to be ignored.

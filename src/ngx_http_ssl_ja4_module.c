@@ -114,36 +114,44 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 
     /* SSLVersion*/
     // get string version:
-    const char *version_str = SSL_get_version(ssl);
+    int client_version_int = SSL_client_version(ssl);
+    int max_version_int = SSL_get_max_proto_version(ssl);
+    int version_int = 0;
 
-    if (strcmp(version_str, SSL3_VERSION_STR) == 0)
+    if (max_version_int > client_version_int)
     {
-        ja4->version = "s3";
-    }
-    else if (strcmp(version_str, TLS1_VERSION_STR) == 0)
-    {
-        ja4->version = "10";
-    }
-    else if (strcmp(version_str, TLS1_1_VERSION_STR) == 0)
-    {
-        ja4->version = "11";
-    }
-    else if (strcmp(version_str, TLS1_2_VERSION_STR) == 0)
-    {
-        ja4->version = "12";
-    }
-    else if (strcmp(version_str, TLS1_3_VERSION_STR) == 0)
-    {
-        ja4->version = "13";
-    }
-    else if (strcmp(version_str, QUICV1_VERSION_STR) == 0)
-    {
-        ja4->version = "q1";
+        version_int = max_version_int;
     }
     else
     {
-        ja4->version = "00"; // Unknown or unhandled version
+        version_int = client_version_int;
     }
+
+    switch(version_int)
+    {
+        case SSL3_VERSION_INT:
+            ja4->version = "s3";
+            break;
+        case TLS1_VERSION_INT:
+            ja4->version = "10";
+            break;
+        case TLS1_1_VERSION_INT:
+            ja4->version = "11";
+            break;
+        case TLS1_2_VERSION_INT:
+            ja4->version = "12";
+            break;
+        case TLS1_3_VERSION_INT:
+            ja4->version = "13";
+            break;
+        case QUICV1_VERSION_INT:
+            ja4->version = "q1";
+            break;
+        default:
+            ja4->version = "00";
+            break;
+    }
+
     /* Cipher suites */
     ja4->ciphers = NULL;
     ja4->ciphers_sz = 0;
