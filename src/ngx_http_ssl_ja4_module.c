@@ -170,13 +170,13 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
             return NGX_DECLINED;
         }
 
+        size_t hex_str_len = sizeof(c->ssl->ciphers[i]);
+
         // Add c->ssl->ciphers to ja4->ciphers
         for (i = 0; i < c->ssl->ciphers_sz; ++i)
         {
-            size_t hex_str_len = strlen(c->ssl->ciphers[i]) + 1; // +1 for null terminator
-
             // Allocate memory for the hex string and copy it
-            ja4->ciphers[ja4->ciphers_sz] = ngx_pnalloc(pool, hex_str_len);
+            ja4->ciphers[ja4->ciphers_sz] = ngx_pnalloc(pool, hex_str_len + 1); // +1 for null terminator
             if (ja4->ciphers[ja4->ciphers_sz] == NULL)
             {
                 // Handle allocation failure and clean up previously allocated memory
@@ -188,7 +188,8 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                 ja4->ciphers = NULL;
                 return NGX_DECLINED;
             }
-            ngx_memcpy(ja4->ciphers[ja4->ciphers_sz], c->ssl->ciphers[i], hex_str_len);
+            ngx_memcpy(ja4->ciphers[ja4->ciphers_sz], (char *)(c->ssl->ciphers + i), hex_str_len);
+            ja4->ciphers[ja4->ciphers_sz][hex_str_len] = '\0';
             ja4->ciphers_sz++;
         }
 
@@ -250,16 +251,17 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         }
         for (i = 0; i < c->ssl->extensions_sz; ++i)
         {
-            if (!ngx_ssl_ja4_is_ext_greased(c->ssl->extensions[i]))
-
+            size_t ext_len = sizeof(c->ssl->extensions[i]) + 1; // +1 for null terminator
+            char *ext = ngx_pnalloc(pool, ext_len);
+            ngx_memcpy(ext, (char *)(c->ssl->extensions + i), ext_len - 1);
+            ext[ext_len - 1] = '\0';
+            if (!ngx_ssl_ja4_is_ext_greased(ext))
             {
-                char *ext = c->ssl->extensions[i];
-                size_t ext_len = strlen(ext) + 1; // +1 for null terminator
 
                 ja4->extensions_count++;
 
                 // ignored extensions are only counted, not hashed
-                if (!ngx_ssl_ja4_is_ext_ignored(c->ssl->extensions[i]))
+                if (!ngx_ssl_ja4_is_ext_ignored(ext))
                 {
 
                     // Allocate memory for the extension string and copy it
@@ -272,6 +274,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                             ngx_pfree(pool, ja4->extensions[j]);
                         }
                         ngx_pfree(pool, ja4->extensions);
+                        ngx_pfree(pool, ext);
                         ja4->extensions = NULL;
                         return NGX_DECLINED;
                     }
@@ -279,12 +282,12 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                     ja4->extensions_sz++;
                 }
                 // for no psk ignored extensions are not counted, not hashed
-                if (ngx_ssl_ja4_is_ext_ignored(c->ssl->extensions[i]))
+                if (ngx_ssl_ja4_is_ext_ignored(ext))
                 {
                     continue;
                 }
                 // check if the extension is not a PSK extension
-                if (!ngx_ssl_ja4_is_ext_dynamic(c->ssl->extensions[i]))
+                if (!ngx_ssl_ja4_is_ext_dynamic(ext))
                 {
                     // Allocate memory for the extension string and copy it
                     ja4->extensions_no_psk[ja4->extensions_no_psk_count] = ngx_pnalloc(pool, ext_len);
@@ -297,6 +300,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                             ngx_pfree(pool, ja4->extensions_no_psk[j]);
                         }
                         ngx_pfree(pool, ja4->extensions_no_psk);
+                        ngx_pfree(pool, ext);
                         ja4->extensions_no_psk = NULL;
                         return NGX_DECLINED;
                     }
@@ -304,6 +308,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                     ja4->extensions_no_psk_count++;
                 }
             }
+            ngx_pfree(pool, ext);
         }
         /* Now, let's sort the ja4->extensions array */
         // what is going on with the mem alloc in these arguments...
@@ -1504,3 +1509,4 @@ ngx_module_t ngx_http_ssl_ja4_module = {
     NULL,                         /* exit process */
     NULL,                         /* exit master */
     NGX_MODULE_V1_PADDING};
+
