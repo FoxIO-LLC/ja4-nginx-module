@@ -2,6 +2,12 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 
+typedef struct {
+    ngx_str_t   ja4;
+    ngx_str_t   ja4_string;
+    ngx_str_t   ja4one;
+} ngx_http_ssl_ja4_ctx_t;
+
 // STRUCTS
 typedef struct ngx_ssl_ja4_s
 {
@@ -379,12 +385,15 @@ ngx_ssl_ja4_detail_print(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     //                    ja4->alpn_first_value);
     // }
 }
-    
 #endif
+
+ngx_module_t ngx_http_ssl_ja4_module;
 
 // FUNCTION PROTOTYPES
 // INIT
 static ngx_int_t ngx_http_ssl_ja4_init(ngx_conf_t *cf);
+
+static ngx_int_t ngx_http_ssl_ja4_init_ctx(ngx_http_request_t *r, ngx_http_ssl_ja4_ctx_t **ctx_out);
 
 // JA4
 int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4);
