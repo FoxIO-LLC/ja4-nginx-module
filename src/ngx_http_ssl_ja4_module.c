@@ -80,7 +80,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 {
     // this function sets stuff on the ja4 struct so the fingerprint can easily, and clearly be formed in a separate function
     SSL *ssl;
-    size_t i;
+    size_t i, j;
     size_t len = 0;
 
     if (!c->ssl)
@@ -180,7 +180,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
             if (ja4->ciphers[ja4->ciphers_sz] == NULL)
             {
                 // Handle allocation failure and clean up previously allocated memory
-                for (size_t j = 0; j < ja4->ciphers_sz; j++)
+                for (j = 0; j < ja4->ciphers_sz; j++)
                 {
                     ngx_pfree(pool, ja4->ciphers[j]);
                 }
@@ -267,7 +267,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                     if (ja4->extensions[ja4->extensions_sz] == NULL)
                     {
                         // Handle allocation failure and clean up previously allocated memory
-                        for (size_t j = 0; j < ja4->extensions_sz; j++)
+                        for (j = 0; j < ja4->extensions_sz; j++)
                         {
                             ngx_pfree(pool, ja4->extensions[j]);
                         }
@@ -292,7 +292,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                     if (ja4->extensions_no_psk[ja4->extensions_no_psk_count] == NULL)
                     {
                         // Handle allocation failure and clean up previously allocated memory
-                        for (size_t j = 0; j < ja4->extensions_no_psk_count; j++)
+                        for (j = 0; j < ja4->extensions_no_psk_count; j++)
                         {
                             ngx_pfree(pool, ja4->extensions_no_psk[j]);
                         }
@@ -332,7 +332,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
             if (ja4->sigalgs[ja4->sigalgs_sz] == NULL)
             {
                 // Handle allocation failure and clean up previously allocated memory
-                for (size_t j = 0; j < ja4->sigalgs_sz; j++)
+                for (j = 0; j < ja4->sigalgs_sz; j++)
                 {
                     ngx_pfree(pool, ja4->sigalgs[j]);
                 }
@@ -563,9 +563,9 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
 {
     // This function calculates the ja4 fingerprint but it doesn't hash extensions and ciphers
     // Instead, it just comma separates them
-
+    size_t i;
     char **sigalgs_copy = malloc(ja4->sigalgs_sz * sizeof(char *));
-    for (size_t i = 0; i < ja4->sigalgs_sz; ++i)
+    for (i = 0; i < ja4->sigalgs_sz; ++i)
     {
         sigalgs_copy[i] = strdup(ja4->sigalgs[i]);
     }
@@ -575,15 +575,15 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     // alpn (2 chars), separators ('_' x3), null-terminator
     size_t len = 1 + 2 + 1 + 2 + 2 + 2 + 3 + 1;
     // Dynamic size for variable elements: ciphers, extensions, signature algorithms
-    for (size_t i = 0; i < ja4->ciphers_sz; ++i)
+    for (i = 0; i < ja4->ciphers_sz; ++i)
     {
         len += strlen(ja4->ciphers[i]) + 1; // strlen of cipher + comma
     }
-    for (size_t i = 0; i < ja4->extensions_sz; ++i)
+    for (i = 0; i < ja4->extensions_sz; ++i)
     {
         len += strlen(ja4->extensions[i]) + 1; // strlen of extension + comma
     }
-    for (size_t i = 0; i < ja4->sigalgs_sz; ++i)
+    for (i = 0; i < ja4->sigalgs_sz; ++i)
     {
         len += strlen(ja4->sigalgs[i]) + 1; // strlen of sigalg + comma
     }
@@ -656,7 +656,7 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     // Add ciphers
     if (ja4->ciphers_sz > 0)
     {
-        for (size_t i = 0; i < ja4->ciphers_sz; ++i)
+        for (i = 0; i < ja4->ciphers_sz; ++i)
         {
             size_t n = ngx_snprintf(out->data + cur, strlen(ja4->ciphers[i]) + 2, "%s,", ja4->ciphers[i]) - out->data - cur;
             cur += n;
@@ -670,7 +670,7 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     // Add extensions
     if (ja4->extensions_sz > 0)
     {
-        for (size_t i = 0; i < ja4->extensions_sz; ++i)
+        for (i = 0; i < ja4->extensions_sz; ++i)
         {
             size_t n = ngx_snprintf(out->data + cur, strlen(ja4->extensions[i]) + 2, "%s,", ja4->extensions[i]) - out->data - cur;
             cur += n;
@@ -682,7 +682,7 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     if (ja4->sigalgs_sz > 0)
     {
         out->data[cur++] = '_'; // Add separator only if signature algorithms are present
-        for (size_t i = 0; i < ja4->sigalgs_sz; ++i)
+        for (i = 0; i < ja4->sigalgs_sz; ++i)
         {
             size_t n = ngx_snprintf(out->data + cur, strlen(sigalgs_copy[i]) + 2, "%s,", sigalgs_copy[i]) - out->data - cur;
             cur += n;
@@ -690,7 +690,7 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
         cur--; // Remove the trailing comma
     }
 
-    for (size_t i = 0; i < ja4->sigalgs_sz; ++i)
+    for (i = 0; i < ja4->sigalgs_sz; ++i)
     {
         free(sigalgs_copy[i]);
     }
@@ -1327,7 +1327,7 @@ void ngx_ssl_ja4l_fp(ngx_pool_t *pool, ngx_ssl_ja4l_t *ja4l, ngx_str_t *out)
     const size_t max_hop_count_len = 3; // uint8_t max is 255, which is 3 characters
 
     // init stuff
-    double propagation_delay_factor; // Declare the variable to store the propagation delay factor
+    double propagation_delay_factor = 1.0; // Declare the variable to store the propagation delay factor
     uint8_t initial_ttl;
 
     // Include space for 2 underscores and the null-terminator
