@@ -1,0 +1,37 @@
+diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
+index 0545150ed..dd27484df 100644
+--- a/src/event/ngx_event_openssl.c
++++ b/src/event/ngx_event_openssl.c
+@@ -1803,7 +1803,7 @@ ngx_SSL_client_features(ngx_connection_t *c) {
+         // Save the array of hex strings to your struct
+         c->ssl->sigalgs_hash_values = sigalgs_hex_strings;
+     }
+-    
++
+     c->ssl->sigalgs_sz = num_sigalgs;
+     return NGX_OK;
+ }
+@@ -1826,6 +1826,7 @@ ngx_SSL_early_cb_fn(SSL *s, int *al, void *arg) {
+         return 1;
+     }
+ 
++    c->ssl->version = 0;
+     c->ssl->extensions_sz = 0;
+     c->ssl->extensions = NULL;
+     got_extensions = SSL_client_hello_getall_extensions_present(s,
+@@ -1845,9 +1846,13 @@ ngx_SSL_early_cb_fn(SSL *s, int *al, void *arg) {
+     c->ssl->extensions = ngx_palloc(c->pool, sizeof(char *) * ext_len);
+     if (c->ssl->extensions != NULL) {
+         for (size_t i = 0; i < ext_len; i++) {
+-            char hex_str[6];  // Buffer to hold the hexadecimal string (4 digits + null terminator)
++            char hex_str[5];
+             snprintf(hex_str, sizeof(hex_str), "%04x", ext_out[i]);
+-            
++
++            if (ext_out[i] == TLSEXT_TYPE_supported_versions) {
++                c->ssl->version = TLS1_3_VERSION;
++            }
++
+             // Allocate memory for the hex string and copy it
+             c->ssl->extensions[i] = ngx_pnalloc(c->pool, sizeof(hex_str));
+             if (c->ssl->extensions[i] == NULL) {

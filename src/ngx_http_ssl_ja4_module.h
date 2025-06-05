@@ -274,7 +274,7 @@ ngx_ssl_ja4_detail_print(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 
     /* Version */
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
-                   pool->log, 0, "ssl_ja4: Version:  %d\n", ja4->version);
+                   pool->log, 0, "ssl_ja4: Version:  %s", ja4->version);
 
     /* Ciphers */
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
@@ -368,7 +368,7 @@ ngx_ssl_ja4_detail_print(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     //                    ja4->alpn_first_value);
     // }
 }
-    
+
 #endif
 
 // FUNCTION PROTOTYPES
