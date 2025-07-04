@@ -6,6 +6,7 @@
 typedef struct ngx_ssl_ja4_s
 {
     char *version; // TLS version
+    char *highest_supported_tls_client_version;
 
     unsigned char transport; // 'q' for QUIC, 't' for TCP
 

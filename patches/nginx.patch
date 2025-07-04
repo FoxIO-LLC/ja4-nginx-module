@@ -1,8 +1,8 @@
 diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
-index 104e8daf7..9f5200c91 100644
+index 104e8daf7..e0c46d21a 100644
 --- a/src/event/ngx_event_openssl.c
 +++ b/src/event/ngx_event_openssl.c
-@@ -1759,6 +1759,173 @@ ngx_ssl_set_session(ngx_connection_t *c, ngx_ssl_session_t *session)
+@@ -1759,6 +1759,210 @@ ngx_ssl_set_session(ngx_connection_t *c, ngx_ssl_session_t *session)
  }
  
  
@@ -114,6 +114,16 @@ index 104e8daf7..9f5200c91 100644
 +    int                            got_extensions;
 +    int                           *ext_out;
 +    size_t                         ext_len;
++
++    // Declare the highest client TLS protocol version
++    int                            highest_supported_tls_client_version;
++
++    const unsigned char           *supported_versions_ext;
++    size_t                         supported_versions_ext_len;
++
++    const unsigned char           *supported_versions;
++    size_t                         supported_versions_len;
++
 +    ngx_connection_t              *c;
 +
 +    c = arg;
@@ -147,7 +157,34 @@ index 104e8daf7..9f5200c91 100644
 +        for (size_t i = 0; i < ext_len; i++) {
 +            char hex_str[6];  // Buffer to hold the hexadecimal string (4 digits + null terminator)
 +            snprintf(hex_str, sizeof(hex_str), "%04x", ext_out[i]);
-+            
++
++            // Check for the supported_versions extension (0x002b) in the ClientHello
++            if (ext_out[i] == 0x002b) {
++                ngx_log_debug0(NGX_LOG_DEBUG_EVENT, c->log, 0, "Found supported_versions extension (0x002b)");
++
++                if (SSL_client_hello_get0_ext(s, 0x002b, &supported_versions_ext, &supported_versions_ext_len)) {
++
++                    // Skip the first byte as it denotes the length of the list
++                    supported_versions_len = supported_versions_ext_len - 1;
++
++                    supported_versions = supported_versions_ext + 1;
++                    highest_supported_tls_client_version = 0;
++
++                    // Extracts and constructs SSL/TLS versions from supported_versions array
++                    for (size_t j = 0; j + 1 < supported_versions_len; j += 2) {
++                        int version = (supported_versions[j] << 8) | supported_versions[j + 1];
++
++                        if (version > highest_supported_tls_client_version) {
++                            highest_supported_tls_client_version = version;
++                        }
++                    }
++
++                    // Set highest supported TLS version for JA4 module
++                    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0, "Highest TLS protocol version found: %d", highest_supported_tls_client_version);
++                    c->ssl->highest_supported_tls_client_version = highest_supported_tls_client_version;
++                }
++            }
++
 +            // Allocate memory for the hex string and copy it
 +            c->ssl->extensions[i] = ngx_pnalloc(c->pool, sizeof(hex_str));
 +            if (c->ssl->extensions[i] == NULL) {
@@ -176,7 +213,7 @@ index 104e8daf7..9f5200c91 100644
  ngx_int_t
  ngx_ssl_handshake(ngx_connection_t *c)
  {
-@@ -1778,12 +1945,16 @@ ngx_ssl_handshake(ngx_connection_t *c)
+@@ -1778,12 +1982,16 @@ ngx_ssl_handshake(ngx_connection_t *c)
  
      ngx_ssl_clear_error(c->log);
  
@@ -196,16 +233,17 @@ index 104e8daf7..9f5200c91 100644
              return NGX_ERROR;
          }
 diff --git a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl.h
-index 860ea26dd..843020703 100644
+index 860ea26dd..da58ed0ad 100644
 --- a/src/event/ngx_event_openssl.h
 +++ b/src/event/ngx_event_openssl.h
-@@ -120,6 +120,24 @@ struct ngx_ssl_connection_s {
+@@ -120,6 +120,25 @@ struct ngx_ssl_connection_s {
      unsigned                    in_ocsp:1;
      unsigned                    early_preread:1;
      unsigned                    write_blocked:1;
 +
 +    // ja4
 +    int             version;
++    int             highest_supported_tls_client_version;
 +
 +    size_t          ciphers_sz;
 +    char **ciphers;
