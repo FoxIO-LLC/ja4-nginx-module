@@ -1,3 +1,7 @@
+# NOTICE
+
+Development for JA4 on Nginx has been on pause due to other priorities taking development resources. This version of JA4 has known issues and bugs and may not produce correct JA4 values. Use at your own risk. We will continue development here as soon as resources become available. If you have questions, feel free to reach out to us at info@foxio.io.
+
 # JA4 on Nginx
 
 This repository contains an nginx module that generates fingerprints from the JA4 suite. Additionally, a small patch to the nginx core is provided and necessary to for the module to function.

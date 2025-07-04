@@ -115,15 +115,12 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     /* SSLVersion*/
     // get string version:
     int client_version_int = SSL_client_version(ssl);
-    int max_version_int = SSL_get_max_proto_version(ssl);
+    int max_version_int = c->ssl->highest_supported_tls_client_version;
     int version_int = 0;
 
-    if (max_version_int > client_version_int)
-    {
+    if (max_version_int) {
         version_int = max_version_int;
-    }
-    else
-    {
+    } else {
         version_int = client_version_int;
     }
 
@@ -170,13 +167,13 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
             return NGX_DECLINED;
         }
 
+        size_t hex_str_len = sizeof(c->ssl->ciphers[i]);
+
         // Add c->ssl->ciphers to ja4->ciphers
         for (i = 0; i < c->ssl->ciphers_sz; ++i)
         {
-            size_t hex_str_len = strlen(c->ssl->ciphers[i]) + 1; // +1 for null terminator
-
             // Allocate memory for the hex string and copy it
-            ja4->ciphers[ja4->ciphers_sz] = ngx_pnalloc(pool, hex_str_len);
+            ja4->ciphers[ja4->ciphers_sz] = ngx_pnalloc(pool, hex_str_len + 1); // +1 for null terminator
             if (ja4->ciphers[ja4->ciphers_sz] == NULL)
             {
                 // Handle allocation failure and clean up previously allocated memory
@@ -188,7 +185,8 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                 ja4->ciphers = NULL;
                 return NGX_DECLINED;
             }
-            ngx_memcpy(ja4->ciphers[ja4->ciphers_sz], c->ssl->ciphers[i], hex_str_len);
+            ngx_memcpy(ja4->ciphers[ja4->ciphers_sz], (char *)(c->ssl->ciphers + i), hex_str_len);
+            ja4->ciphers[ja4->ciphers_sz][hex_str_len] = '\0';
             ja4->ciphers_sz++;
         }
 
@@ -250,16 +248,17 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         }
         for (i = 0; i < c->ssl->extensions_sz; ++i)
         {
-            if (!ngx_ssl_ja4_is_ext_greased(c->ssl->extensions[i]))
-
+            size_t ext_len = sizeof(c->ssl->extensions[i]) + 1; // +1 for null terminator
+            char *ext = ngx_pnalloc(pool, ext_len);
+            ngx_memcpy(ext, (char *)(c->ssl->extensions + i), ext_len - 1);
+            ext[ext_len - 1] = '\0';
+            if (!ngx_ssl_ja4_is_ext_greased(ext))
             {
-                char *ext = c->ssl->extensions[i];
-                size_t ext_len = strlen(ext) + 1; // +1 for null terminator
 
                 ja4->extensions_count++;
 
                 // ignored extensions are only counted, not hashed
-                if (!ngx_ssl_ja4_is_ext_ignored(c->ssl->extensions[i]))
+                if (!ngx_ssl_ja4_is_ext_ignored(ext))
                 {
 
                     // Allocate memory for the extension string and copy it
@@ -272,6 +271,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                             ngx_pfree(pool, ja4->extensions[j]);
                         }
                         ngx_pfree(pool, ja4->extensions);
+                        ngx_pfree(pool, ext);
                         ja4->extensions = NULL;
                         return NGX_DECLINED;
                     }
@@ -279,12 +279,12 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                     ja4->extensions_sz++;
                 }
                 // for no psk ignored extensions are not counted, not hashed
-                if (ngx_ssl_ja4_is_ext_ignored(c->ssl->extensions[i]))
+                if (ngx_ssl_ja4_is_ext_ignored(ext))
                 {
                     continue;
                 }
                 // check if the extension is not a PSK extension
-                if (!ngx_ssl_ja4_is_ext_dynamic(c->ssl->extensions[i]))
+                if (!ngx_ssl_ja4_is_ext_dynamic(ext))
                 {
                     // Allocate memory for the extension string and copy it
                     ja4->extensions_no_psk[ja4->extensions_no_psk_count] = ngx_pnalloc(pool, ext_len);
@@ -297,6 +297,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                             ngx_pfree(pool, ja4->extensions_no_psk[j]);
                         }
                         ngx_pfree(pool, ja4->extensions_no_psk);
+                        ngx_pfree(pool, ext);
                         ja4->extensions_no_psk = NULL;
                         return NGX_DECLINED;
                     }
@@ -304,6 +305,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                     ja4->extensions_no_psk_count++;
                 }
             }
+            ngx_pfree(pool, ext);
         }
         /* Now, let's sort the ja4->extensions array */
         // what is going on with the mem alloc in these arguments...
@@ -1037,29 +1039,243 @@ ngx_http_ssl_ja4x_string(ngx_http_request_t *r,
 void ngx_ssl_ja4x_fp_string(ngx_pool_t *pool, ngx_ssl_ja4x_t *ja4x, ngx_str_t *out) {}
 
 // JA4H
-int ngx_ssl_ja4h(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h)
+int ngx_ssl_ja4h(ngx_http_request_t *r, ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h)
 {
-    // this function sets stuff on the ja4s struct so the fingerprint can easily, and clearly be formed in a separate function
-    SSL *ssl;
-    // size_t i;
-    // size_t len = 0;
-    // unsigned short us = 0;
+    ngx_str_t *entry;
+    size_t i;
 
-    if (!c->ssl)
-    {
+    // JA4H_a
+    ngx_memset(ja4h->http_method, 0, 3);
+    ngx_strlow((u_char *) ja4h->http_method, (u_char *) r->method_name.data, 2);
+
+    ngx_memset(ja4h->http_version, 0, 3);
+    ngx_snprintf((u_char *) ja4h->http_version, 2, "%d%d", r->http_version / 1000, r->http_version % 1000);
+
+    ja4h->cookie_presence = r->headers_in.cookie ? 'c' : 'n';
+    ja4h->referrer_presence = r->headers_in.referer ? 'r' : 'n';
+
+    ngx_memset(ja4h->num_headers, 0, 3);
+    ngx_snprintf((u_char *) ja4h->num_headers, 2, "%02d", r->headers_in.headers.part.nelts - (r->headers_in.cookie ? 1 : 0) - (r->headers_in.referer ? 1 : 0));
+
+    ngx_memcpy(ja4h->primary_accept_language, "0000", 5);
+
+    // JA4H_b
+    SHA256_CTX sha256;
+    unsigned char hash_result[SHA256_DIGEST_LENGTH];
+    memset(hash_result, 0, SHA256_DIGEST_LENGTH);
+
+    if (SHA256_Init(&sha256) != 1) {
         return NGX_DECLINED;
     }
 
-    if (!c->ssl->handshaked)
-    {
+    ngx_list_part_t *headers_part = &r->headers_in.headers.part;
+    ngx_table_elt_t *header_item = headers_part->elts;
+
+    size_t raw_http_headers_len = 0;
+    // Count the total length of all header key separated by a ','
+    for (i = 0; /* void */; i++) {
+        if (i >= headers_part->nelts) {
+            if (headers_part->next == NULL){
+                break;
+            }
+            headers_part = headers_part->next;
+            header_item = headers_part->elts;
+            i = 0;
+        }
+        raw_http_headers_len += header_item[i].key.len + 1;
+    }
+
+    // Allocate memory for the raw_http_headers
+    ja4h->raw_http_headers = ngx_pcalloc(pool, raw_http_headers_len + 1);
+    if (ja4h->raw_http_headers == NULL) {
+        return NGX_ERROR;
+    }
+
+    headers_part = &r->headers_in.headers.part;
+    header_item = headers_part->elts;
+    u_char *current = NULL;
+    for (i = 0; /* void */; i++) {
+        if (i >= headers_part->nelts) {
+            if (headers_part->next == NULL){
+                break;
+            }
+            headers_part = headers_part->next;
+            header_item = headers_part->elts;
+            i = 0;
+        }
+
+        if ((ja4h->primary_accept_language[0] == '0') 
+            && (header_item[i].key.len == sizeof("Accept-Language") - 1)
+            && (ngx_strncasecmp(header_item[i].key.data, (u_char *) "Accept-Language", sizeof("Accept-Language") - 1) == 0)) {
+            size_t idx, c;
+            // Get the first 4 character of primary Accept-Language
+            for( c=0, idx=0; idx < 4; c++ ) {
+                if (header_item[i].value.data[c] == '-') {
+                    continue;
+                } else if (header_item[i].value.data[c] == ',' 
+                    || header_item[i].value.data[c] == ';'
+                    || header_item[i].value.data[c] == '\0') {
+                    break;
+                }
+                ja4h->primary_accept_language[idx++] = ngx_tolower(header_item[i].value.data[c]);
+            }
+        }
+        if (current == NULL) {
+            current = (u_char *) ja4h->raw_http_headers;
+        } else {
+            *current++ = ',';
+        }
+        ngx_memcpy(current, header_item[i].key.data, header_item[i].key.len);
+        current += header_item[i].key.len;
+        SHA256_Update(&sha256, header_item[i].key.data, header_item[i].key.len);
+    }
+    SHA256_Final(hash_result, &sha256);
+
+    // Convert the first 6 bytes of hash to hex for JA4H_b
+    ngx_memset(ja4h->http_header_hash, 0, 13);
+    for (i = 0; i < 6; i++) {
+        sprintf(&ja4h->http_header_hash[i * 2], "%02x", hash_result[i]);
+    }
+
+    // JA4H_c_d
+    size_t raw_cookie_fields_len = 0;
+    size_t raw_cookie_values_len = 0;
+
+    ngx_array_t *cookie_key_list = ngx_array_create(pool, 10, sizeof(ngx_str_t));
+    if (cookie_key_list == NULL) {
+        return NGX_ERROR;
+    }
+    ngx_array_t *cookie_key_value_list = ngx_array_create(pool, 10, sizeof(ngx_str_t));
+    if (cookie_key_value_list == NULL) {
+        return NGX_ERROR;
+    }
+
+    // Parse cookies value assignment
+    ngx_table_elt_t *req_header_cookie;
+
+    for(req_header_cookie = r->headers_in.cookie; req_header_cookie; req_header_cookie = req_header_cookie->next) {
+        ngx_str_t *item;
+        u_char *start, *end, *assignment;
+        size_t key_len, value_len;
+
+        start = req_header_cookie->value.data;
+        end = start + req_header_cookie->value.len;
+        for (current = start; current <= end; current++) {
+            if (*current == ';' || current == end) {
+                for(; *start && isspace(*start) && start < end; start++);
+                item = (ngx_str_t *) ngx_array_push(cookie_key_value_list);
+                if (item == NULL) {
+                    return NGX_ERROR;
+                }
+                item->len = current - start;
+                item->data = ngx_pcalloc(pool, item->len + 1);
+                if (item->data == NULL) {
+                    return NGX_ERROR;
+                }
+                ngx_memcpy(item->data, start, item->len);
+                start = current + 1;
+                assignment = (u_char *) strchr((char *) item->data, '=');
+                if (assignment != NULL) {
+                    key_len = assignment - item->data;
+                } else {
+                    key_len = item->len;
+                }
+                value_len = item->len - key_len - 1;
+                raw_cookie_fields_len += key_len + 1;
+                raw_cookie_values_len += value_len + 1;
+            }
+        }
+    }
+
+    // Sort the Cookie Fields + Value for JA4H
+    ngx_qsort(cookie_key_value_list->elts, cookie_key_value_list->nelts, sizeof(ngx_str_t), compare_ngx_str);
+
+    unsigned char hash_result_fields[SHA256_DIGEST_LENGTH];
+    unsigned char hash_result_fields_values[SHA256_DIGEST_LENGTH];
+    SHA256_CTX sha256_fields;
+    SHA256_CTX sha256_fields_values;
+
+    memset(hash_result_fields, 0, SHA256_DIGEST_LENGTH);
+    memset(hash_result_fields_values, 0, SHA256_DIGEST_LENGTH);
+
+    if (SHA256_Init(&sha256_fields) != 1) {
+        return NGX_DECLINED;
+    }
+    if (SHA256_Init(&sha256_fields_values) != 1) {
         return NGX_DECLINED;
     }
 
-    ssl = c->ssl->connection;
-    if (!ssl)
-    {
-        return NGX_DECLINED;
+    ja4h->raw_cookie_fields = ngx_pcalloc(pool, raw_cookie_fields_len + 1);
+    if (ja4h->raw_cookie_fields == NULL) {
+        return NGX_ERROR;
     }
+    ja4h->raw_cookie_values = ngx_pcalloc(pool, raw_cookie_values_len + 1);
+    if (ja4h->raw_cookie_values == NULL) {
+        return NGX_ERROR;
+    }
+
+    u_char *current_raw_cookie_field, *current_raw_cookie_value;
+    size_t key_len, value_len;
+
+    current_raw_cookie_field = (u_char *) ja4h->raw_cookie_fields;
+    current_raw_cookie_value = (u_char *) ja4h->raw_cookie_values;
+
+    for (i = 0; i < cookie_key_value_list->nelts; i++) {
+        u_char *value, *assignment;
+        entry = (ngx_str_t *) cookie_key_value_list->elts + i;
+        SHA256_Update(&sha256_fields_values, entry->data, entry->len);
+        assignment = (u_char *) strchr((char *) entry->data, '=');
+        if (assignment != NULL) {
+            value = assignment + 1;
+            // Split key value assignment into two strings
+            *assignment = '\0';
+            key_len = assignment - entry->data;
+            value_len = entry->len - key_len - 1;
+        } else {
+            key_len = entry->len;
+            value_len = 0;
+            value = NULL;
+        }
+
+        SHA256_Update(&sha256_fields, entry->data, entry->len);
+
+        // Copy the key to the raw_cookie_fields
+        if (current_raw_cookie_field != (u_char *) ja4h->raw_cookie_fields) {
+            // Add comma separator if not the first entry
+            *current_raw_cookie_field++ = ',';
+        }
+        ngx_memcpy(current_raw_cookie_field, entry->data, key_len);
+        current_raw_cookie_field += key_len;
+
+        if (value != NULL) {
+            // Copy the value to the raw_cookie_values
+            if (current_raw_cookie_value != (u_char *) ja4h->raw_cookie_values) {
+                // Add comma separator if not the first entry
+                *current_raw_cookie_value++ = ',';
+            }
+            ngx_memcpy(current_raw_cookie_value, value, value_len);
+            current_raw_cookie_value += value_len;
+        }
+        if (assignment != NULL) {
+            // Restore original key value assignment string
+            *assignment = '=';
+        }
+    }
+    SHA256_Final(hash_result_fields, &sha256_fields);
+    SHA256_Final(hash_result_fields_values, &sha256_fields_values);
+
+    // Convert the first 6 bytes of hash to hex for JA4H_c
+    ngx_memset(ja4h->cookie_field_hash, 0, 13);
+    for (i = 0; i < 6; i++) {
+        sprintf(&ja4h->cookie_field_hash[i * 2], "%02x", hash_result_fields[i]);
+    }
+
+    // Convert the first 6 bytes of hash to hex for JA4H_d
+    ngx_memset(ja4h->cookie_value_hash, 0, 13);
+    for (i = 0; i < 6; i++) {
+        sprintf(&ja4h->cookie_value_hash[i * 2], "%02x", hash_result_fields_values[i]);
+    }
+
     return NGX_OK;
 }
 static ngx_int_t
@@ -1074,7 +1290,7 @@ ngx_http_ssl_ja4h(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4h(r->connection, r->pool, &ja4h) == NGX_DECLINED)
+    if (ngx_ssl_ja4h(r, r->pool, &ja4h) == NGX_DECLINED)
     {
         return NGX_ERROR;
     }
@@ -1089,8 +1305,23 @@ ngx_http_ssl_ja4h(ngx_http_request_t *r,
 
     return NGX_OK;
 }
-void ngx_ssl_ja4h_fp(ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h, ngx_str_t *out) {}
-
+void ngx_ssl_ja4h_fp(ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h, ngx_str_t *out) {
+    out->data = ngx_pnalloc(pool, JA4H_FINGERPRINT_LENGTH + 1);
+    if (out->data == NULL)
+    {
+        out->len = 0;
+        return;
+    }
+    memset(out->data, 0, JA4H_FINGERPRINT_LENGTH + 1);
+    ngx_snprintf(out->data, JA4H_FINGERPRINT_LENGTH, "%s%s%c%c%s%s_%s_%s_%s",
+        ja4h->http_method, ja4h->http_version,
+        ja4h->cookie_presence, ja4h->referrer_presence, 
+        ja4h->num_headers, ja4h->primary_accept_language,
+        ja4h->http_header_hash,
+        ja4h->cookie_field_hash,
+        ja4h->cookie_value_hash);
+    out->len = ngx_strlen(out->data);
+}
 // JA4H STRING
 static ngx_int_t
 ngx_http_ssl_ja4h_string(ngx_http_request_t *r,
@@ -1104,7 +1335,7 @@ ngx_http_ssl_ja4h_string(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4h(r->connection, r->pool, &ja4h) == NGX_DECLINED)
+    if (ngx_ssl_ja4h(r, r->pool, &ja4h) == NGX_DECLINED)
     {
         return NGX_ERROR;
     }
@@ -1119,7 +1350,37 @@ ngx_http_ssl_ja4h_string(ngx_http_request_t *r,
 
     return NGX_OK;
 }
-void ngx_ssl_ja4h_fp_string(ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h, ngx_str_t *out) {}
+void ngx_ssl_ja4h_fp_string(ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h, ngx_str_t *out) {
+    u_char *current;
+    size_t len;
+    len = JA4H_A_FINGERPRINT_LENGTH + 1 + ngx_strlen(ja4h->raw_http_headers) + 1 + ngx_strlen(ja4h->raw_cookie_fields) + 1 + ngx_strlen(ja4h->raw_cookie_values);
+    out->data = ngx_pnalloc(pool, len + 1);
+    if (out->data == NULL)
+    {
+        out->len = 0;
+        return;
+    }
+
+    memset(out->data, 0, len + 1);
+    current = out->data;
+    ngx_snprintf(current, JA4H_A_FINGERPRINT_LENGTH, "%s%s%c%c%s%s_%s_%s_%s",
+        ja4h->http_method, ja4h->http_version,
+        ja4h->cookie_presence, ja4h->referrer_presence, 
+        ja4h->num_headers, ja4h->primary_accept_language);
+    current += JA4H_A_FINGERPRINT_LENGTH;
+    *current++ = '_';
+    ngx_memcpy(current, ja4h->raw_http_headers, ngx_strlen(ja4h->raw_http_headers));
+    current += ngx_strlen(ja4h->raw_http_headers);
+    *current++ = '_';
+    ngx_memcpy(current, ja4h->raw_cookie_fields, ngx_strlen(ja4h->raw_cookie_fields));
+    current += ngx_strlen(ja4h->raw_cookie_fields);
+    *current++ = '_';
+    ngx_memcpy(current, ja4h->raw_cookie_values, ngx_strlen(ja4h->raw_cookie_values));
+    current += ngx_strlen(ja4h->raw_cookie_values);
+    *current = '\0';
+
+    out->len = ngx_strlen(out->data);
+}
 
 // JA4T
 int ngx_ssl_ja4t(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4t_t *ja4t)
@@ -1504,3 +1765,4 @@ ngx_module_t ngx_http_ssl_ja4_module = {
     NULL,                         /* exit process */
     NULL,                         /* exit master */
     NGX_MODULE_V1_PADDING};
+

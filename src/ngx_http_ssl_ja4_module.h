@@ -6,6 +6,7 @@
 typedef struct ngx_ssl_ja4_s
 {
     char *version; // TLS version
+    char *highest_supported_tls_client_version;
 
     unsigned char transport; // 'q' for QUIC, 't' for TCP
 
@@ -140,6 +141,9 @@ typedef struct ngx_ssl_ja4l_s
 #define DTLS1_2_VERSION_INT 0xFEFD
 #define QUICV1_VERSION_INT  0x0001
 
+// JA4H character lenght definitions without null terminator
+#define JA4H_A_FINGERPRINT_LENGTH 2 + 2 + 1 + 1 + 2 + 4
+#define JA4H_FINGERPRINT_LENGTH  JA4H_A_FINGERPRINT_LENGTH  + 1 + 12 + 1 + 12 + 1 + 12
 
 /**
  * Grease values to be ignored.
@@ -229,6 +233,13 @@ static int compare_hexes(const void *a, const void *b)
     if (hex_a > hex_b)
         return 1;
     return 0;
+}
+
+static int ngx_libc_cdecl compare_ngx_str(const void *one, const void *two)
+{
+    ngx_str_t *a = (ngx_str_t *) one;
+    ngx_str_t *b = (ngx_str_t *) two;
+    return ngx_strncasecmp(a->data, b->data, a->len);
 }
 
 #if (NGX_DEBUG)
@@ -396,7 +407,7 @@ void ngx_ssl_ja4s_fp_string(ngx_pool_t *pool, ngx_ssl_ja4s_t *ja4, ngx_str_t *ou
 static ngx_int_t ngx_http_ssl_ja4s_string(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
 
 // JA4H
-int ngx_ssl_ja4h(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h);
+int ngx_ssl_ja4h(ngx_http_request_t *r, ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h);
 void ngx_ssl_ja4h_fp(ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h, ngx_str_t *out);
 static ngx_int_t ngx_http_ssl_ja4h(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
 // JA4H STRING
