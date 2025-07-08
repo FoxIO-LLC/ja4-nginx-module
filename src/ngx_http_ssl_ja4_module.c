@@ -1039,6 +1039,11 @@ int ngx_ssl_ja4h(ngx_http_request_t *r, ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h)
     ngx_str_t *entry;
     size_t i;
 
+	if (r->method_name.len < 2) {
+		ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0, "JA4H failed: Unknown request method");
+		return NGX_DECLINED;
+	}
+
     // JA4H_a
     ngx_memset(ja4h->http_method, 0, 3);
     ngx_strlow((u_char *) ja4h->http_method, (u_char *) r->method_name.data, 2);
@@ -1099,7 +1104,7 @@ int ngx_ssl_ja4h(ngx_http_request_t *r, ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h)
             i = 0;
         }
 
-        if ((ja4h->primary_accept_language[0] == '0') 
+        if ((ja4h->primary_accept_language[0] == '0')
             && (header_item[i].key.len == sizeof("Accept-Language") - 1)
             && (ngx_strncasecmp(header_item[i].key.data, (u_char *) "Accept-Language", sizeof("Accept-Language") - 1) == 0)) {
             size_t idx, c;
@@ -1107,7 +1112,7 @@ int ngx_ssl_ja4h(ngx_http_request_t *r, ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h)
             for( c=0, idx=0; idx < 4; c++ ) {
                 if (header_item[i].value.data[c] == '-') {
                     continue;
-                } else if (header_item[i].value.data[c] == ',' 
+                } else if (header_item[i].value.data[c] == ','
                     || header_item[i].value.data[c] == ';'
                     || header_item[i].value.data[c] == '\0') {
                     break;
@@ -1310,7 +1315,7 @@ void ngx_ssl_ja4h_fp(ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h, ngx_str_t *out) {
     memset(out->data, 0, JA4H_FINGERPRINT_LENGTH + 1);
     ngx_snprintf(out->data, JA4H_FINGERPRINT_LENGTH, "%s%s%c%c%s%s_%s_%s_%s",
         ja4h->http_method, ja4h->http_version,
-        ja4h->cookie_presence, ja4h->referrer_presence, 
+        ja4h->cookie_presence, ja4h->referrer_presence,
         ja4h->num_headers, ja4h->primary_accept_language,
         ja4h->http_header_hash,
         ja4h->cookie_field_hash,
@@ -1360,7 +1365,7 @@ void ngx_ssl_ja4h_fp_string(ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h, ngx_str_t *o
     current = out->data;
     ngx_snprintf(current, JA4H_A_FINGERPRINT_LENGTH, "%s%s%c%c%s%s_%s_%s_%s",
         ja4h->http_method, ja4h->http_version,
-        ja4h->cookie_presence, ja4h->referrer_presence, 
+        ja4h->cookie_presence, ja4h->referrer_presence,
         ja4h->num_headers, ja4h->primary_accept_language);
     current += JA4H_A_FINGERPRINT_LENGTH;
     *current++ = '_';
