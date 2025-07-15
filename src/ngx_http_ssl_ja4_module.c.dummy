@@ -1,0 +1,12 @@
+#include <ngx_config.h>
+#include <ngx_core.h>
+#include <ngx_http.h>
+
+ngx_module_t ngx_http_ssl_ja4_module = {
+    NGX_MODULE_V1,
+    NULL, /* module context */
+    NULL, /* module directives */
+    NGX_HTTP_MODULE, /* module type */
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+    NGX_MODULE_V1_PADDING
+};
