@@ -14,6 +14,12 @@ You can quickly test out this module with:
 1. `cd docker`
 2. `docker-compose up --build`
 
+A multi-stage `Dockerfile` is also included in the project root. You can run the build directly from the root using:
+
+```bash
+docker-compose up --build
+```
+
 You can also build from source with:
 
 1. `docker build -t ja4-nginx:source .`
