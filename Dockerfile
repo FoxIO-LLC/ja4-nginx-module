@@ -57,9 +57,9 @@ WORKDIR /tmp
 COPY --from=build-cache /tmp/nginx-${NGINX_VERSION} /tmp/nginx-${NGINX_VERSION}
 COPY --from=build-cache /tmp/openssl-${OPENSSL_VERSION} /tmp/openssl-${OPENSSL_VERSION}
 
-COPY . /tmp/ja4-nginx-module
 
 # Patch OpenSSL
+COPY ./patches/openssl.patch /tmp/ja4-nginx-module/patches/
 WORKDIR /tmp/openssl-${OPENSSL_VERSION}
 RUN patch -p1 < /tmp/ja4-nginx-module/patches/openssl.patch
 
@@ -68,6 +68,7 @@ RUN make -j$(nproc) && \
     make install_sw LIBDIR=lib
 
 # Patch nginx
+COPY . /tmp/ja4-nginx-module
 WORKDIR /tmp/nginx-${NGINX_VERSION}
 RUN patch -p1 < /tmp/ja4-nginx-module/patches/nginx.patch
 
