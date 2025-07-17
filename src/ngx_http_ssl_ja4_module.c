@@ -185,7 +185,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
                 ja4->ciphers = NULL;
                 return NGX_DECLINED;
             }
-            ngx_memcpy(ja4->ciphers[ja4->ciphers_sz], c->ssl->ciphers[i], hex_str_len);
+            ngx_memcpy(ja4->ciphers[ja4->ciphers_sz], (char *)c->ssl->ciphers[i], hex_str_len);
             ja4->ciphers_sz++;
         }
 
@@ -250,7 +250,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
             if (!ngx_ssl_ja4_is_ext_greased(c->ssl->extensions[i]))
 
             {
-                char *ext = c->ssl->extensions[i];
+                char *ext = (char *)c->ssl->extensions[i];
                 size_t ext_len = strlen(ext) + 1; // +1 for null terminator
 
                 ja4->extensions_count++;
