@@ -171,6 +171,9 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         for (i = 0; i < c->ssl->ciphers_sz; ++i)
         {
             size_t hex_str_len = strlen(c->ssl->ciphers[i]) + 1; // +1 for null terminator
+            if (ngx_ssl_ja4_is_ext_greased(c->ssl->ciphers[i])) {
+                continue;
+            }
 
             // Allocate memory for the hex string and copy it
             ja4->ciphers[ja4->ciphers_sz] = ngx_pnalloc(pool, hex_str_len);
@@ -384,6 +387,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
             sprintf(hex_hash + 2 * i, "%02x", hash_result[i]);
         }
         ngx_memcpy(ja4->extension_hash, hex_hash, 2 * SHA256_DIGEST_LENGTH);
+        ja4->extension_hash[2 * SHA256_DIGEST_LENGTH] = '\0';
 
         // Convert the truncated hash to hexadecimal format
         char hex_hash_truncated[2 * 6 + 1]; // 6 bytes, 2 characters each = 12 characters plus null-terminator
@@ -426,6 +430,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
             sprintf(hex_hash + 2 * i, "%02x", hash_result[i]);
         }
         ngx_memcpy(ja4->extension_hash_no_psk, hex_hash, 2 * SHA256_DIGEST_LENGTH);
+        ja4->extension_hash_no_psk[2 * SHA256_DIGEST_LENGTH] = '\0';
 
         // Convert the truncated hash to hexadecimal format
         char hex_hash_truncated[2 * 6 + 1]; // 6 bytes, 2 characters each = 12 characters plus null-terminator
