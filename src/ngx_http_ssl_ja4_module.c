@@ -115,10 +115,10 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     /* SSLVersion*/
     // get string version:
     int client_version_int = SSL_client_version(ssl);
-    int max_version_int = c->ssl->highest_supported_tls_client_version;
+    int max_version_int = SSL_get_max_proto_version(ssl);
     int version_int = 0;
 
-    if (max_version_int) {
+    if (c->ssl->version) {
         version_int = max_version_int;
     } else {
         version_int = client_version_int;
