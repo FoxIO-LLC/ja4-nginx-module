@@ -239,71 +239,71 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     // no need for sz here bc not counting ignored extensions
     ja4->extensions_no_psk = NULL;
     ja4->extensions_no_psk_count = 0;
+
     if (c->ssl->extensions_sz && c->ssl->extensions)
     {
         len = c->ssl->extensions_sz * sizeof(char *);
         ja4->extensions = ngx_pnalloc(pool, len);
         ja4->extensions_no_psk = ngx_pnalloc(pool, len);
-        if (ja4->extensions == NULL)
-        {
+        if (ja4->extensions == NULL || ja4->extensions_no_psk == NULL) {
             return NGX_DECLINED;
         }
+
         for (i = 0; i < c->ssl->extensions_sz; ++i)
         {
-            if (!ngx_ssl_ja4_is_ext_greased(c->ssl->extensions[i]))
-
-            {
-                char *ext = (char *)c->ssl->extensions[i];
-                size_t ext_len = strlen(ext) + 1; // +1 for null terminator
-
-                ja4->extensions_count++;
-
-                // ignored extensions are only counted, not hashed
-                if (!ngx_ssl_ja4_is_ext_ignored(c->ssl->extensions[i]))
-                {
-
-                    // Allocate memory for the extension string and copy it
-                    ja4->extensions[ja4->extensions_sz] = ngx_pnalloc(pool, ext_len);
-                    if (ja4->extensions[ja4->extensions_sz] == NULL)
-                    {
-                        // Handle allocation failure and clean up previously allocated memory
-                        for (j = 0; j < ja4->extensions_sz; j++)
-                        {
-                            ngx_pfree(pool, ja4->extensions[j]);
-                        }
-                        ngx_pfree(pool, ja4->extensions);
-                        ja4->extensions = NULL;
-                        return NGX_DECLINED;
-                    }
-                    ngx_memcpy(ja4->extensions[ja4->extensions_sz], ext, ext_len);
-                    ja4->extensions_sz++;
-                }
-                // for no psk ignored extensions are not counted, not hashed
-                if (ngx_ssl_ja4_is_ext_ignored(c->ssl->extensions[i]))
-                {
-                    continue;
-                }
-                // check if the extension is not a PSK extension
-                if (!ngx_ssl_ja4_is_ext_dynamic(c->ssl->extensions[i]))
-                {
-                    // Allocate memory for the extension string and copy it
-                    ja4->extensions_no_psk[ja4->extensions_no_psk_count] = ngx_pnalloc(pool, ext_len);
-                    // handle allocation failure
-                    if (ja4->extensions_no_psk[ja4->extensions_no_psk_count] == NULL)
-                    {
-                        // Handle allocation failure and clean up previously allocated memory
-                        for (j = 0; j < ja4->extensions_no_psk_count; j++)
-                        {
-                            ngx_pfree(pool, ja4->extensions_no_psk[j]);
-                        }
-                        ngx_pfree(pool, ja4->extensions_no_psk);
-                        ja4->extensions_no_psk = NULL;
-                        return NGX_DECLINED;
-                    }
-                    ngx_memcpy(ja4->extensions_no_psk[ja4->extensions_no_psk_count], ext, ext_len);
-                    ja4->extensions_no_psk_count++;
-                }
+            if (ngx_ssl_ja4_is_ext_greased(c->ssl->extensions[i])) {
+                continue;
             }
+
+            char *ext = (char *)c->ssl->extensions[i];
+            size_t ext_len = strlen(ext) + 1; // +1 for null terminator
+
+            ja4->extensions_count++;
+
+            // ignored extensions are only counted, not hashed
+            if (ngx_ssl_ja4_is_ext_ignored(c->ssl->extensions[i])) {
+                continue;
+            }
+
+            // Allocate memory for the extension string and copy it
+            ja4->extensions[ja4->extensions_sz] = ngx_pnalloc(pool, ext_len);
+            if (ja4->extensions[ja4->extensions_sz] == NULL)
+            {
+                // Handle allocation failure and clean up previously allocated memory
+                for (j = 0; j < ja4->extensions_sz; j++)
+                {
+                    ngx_pfree(pool, ja4->extensions[j]);
+                }
+                ngx_pfree(pool, ja4->extensions);
+                ja4->extensions = NULL;
+                return NGX_DECLINED;
+            }
+            ngx_memcpy(ja4->extensions[ja4->extensions_sz], ext, ext_len);
+            ja4->extensions_sz++;
+
+            // for no psk ignored extensions are not counted, not hashed
+
+            // check if the extension is not a PSK extension
+            if (ngx_ssl_ja4_is_ext_dynamic(c->ssl->extensions[i])) {
+                continue;
+            }
+
+            // Allocate memory for the extension string and copy it
+            ja4->extensions_no_psk[ja4->extensions_no_psk_count] = ngx_pnalloc(pool, ext_len);
+            // handle allocation failure
+            if (ja4->extensions_no_psk[ja4->extensions_no_psk_count] == NULL)
+            {
+                // Handle allocation failure and clean up previously allocated memory
+                for (j = 0; j < ja4->extensions_no_psk_count; j++)
+                {
+                    ngx_pfree(pool, ja4->extensions_no_psk[j]);
+                }
+                ngx_pfree(pool, ja4->extensions_no_psk);
+                ja4->extensions_no_psk = NULL;
+                return NGX_DECLINED;
+            }
+            ngx_memcpy(ja4->extensions_no_psk[ja4->extensions_no_psk_count], ext, ext_len);
+            ja4->extensions_no_psk_count++;
         }
         /* Now, let's sort the ja4->extensions array */
         // what is going on with the mem alloc in these arguments...
