@@ -1,5 +1,5 @@
 import subprocess
-import argparse
+import pytest
 from pathlib import Path
 
 # Pinned curl image for reproducible TLS stack
@@ -36,31 +36,15 @@ def run_curl(name: str, args: list[str]) -> str:
     result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     return result.stdout
 
-def test_integration():
-    for name, curl_args in CASES:
-        output = run_curl(name, curl_args)
-        print(f"\n=== Output for {name} ===\n{output}")
-        expected_path = EXPECTED_DIR / f"{name}.txt"
+@pytest.mark.parametrize("name,curl_args", CASES)
+def test_integration(name, curl_args, request):
+    output = run_curl(name, curl_args)
+    print(f"\n=== Output for {name} ===\n{output}")
+    expected_path = EXPECTED_DIR / f"{name}.txt"
+    if request.config.getoption("--record"):
+        expected_path.write_text(output)
+        print(f"[INFO] Recorded output for {name} to {expected_path}")
+    else:
         assert expected_path.exists(), f"Missing golden file for {name}: {expected_path}"
         expected = expected_path.read_text()
         assert output == expected, f"Output mismatch for {name}"
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--record", action="store_true", help="Record outputs as golden files")
-    args = parser.parse_args()
-
-    for name, curl_args in CASES:
-        output = run_curl(name, curl_args)
-        print(f"\n=== Output for {name} ===\n{output}")
-        expected_path = EXPECTED_DIR / f"{name}.txt"
-        if args.record:
-            expected_path.write_text(output)
-            print(f"[INFO] Recorded output for {name} to {expected_path}")
-        else:
-            assert expected_path.exists(), f"Missing golden file for {name}: {expected_path}"
-            expected = expected_path.read_text()
-            assert output == expected, f"Output mismatch for {name}"
-
-if __name__ == "__main__":
-    main()
