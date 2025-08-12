@@ -1818,6 +1818,12 @@ ngx_http_ssl_ja4_init_ctx(ngx_http_request_t *r, ngx_http_ssl_ja4_ctx_t **ctx_ou
 {
     ngx_http_ssl_ja4_ctx_t *ctx;
     ctx = ngx_http_get_module_ctx(r, ngx_http_ssl_ja4_module);
+
+    if (ctx != NULL && ctx_out) {
+        *ctx_out = ctx;
+        return NGX_OK;
+    }
+
     ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_ssl_ja4_ctx_t));
     if (ctx == NULL) {
         return NGX_ERROR;
