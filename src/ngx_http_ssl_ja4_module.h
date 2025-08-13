@@ -393,7 +393,7 @@ ngx_module_t ngx_http_ssl_ja4_module;
 // INIT
 static ngx_int_t ngx_http_ssl_ja4_init(ngx_conf_t *cf);
 
-static ngx_int_t ngx_http_ssl_ja4_init_ctx(ngx_http_request_t *r, ngx_http_ssl_ja4_ctx_t **ctx_out);
+static ngx_http_ssl_ja4_ctx_t *ngx_get_or_create_ja4_ctx(ngx_http_request_t *r);
 
 // JA4
 int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4);
