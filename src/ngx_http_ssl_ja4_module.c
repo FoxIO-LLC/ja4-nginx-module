@@ -533,6 +533,7 @@ void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT, pool->log, 0, "ssl_ja4: fp: [%V]\n", out);
 #endif
 }
+
 static ngx_int_t
 ngx_http_ssl_ja4(ngx_http_request_t *r,
                  ngx_http_variable_value_t *v, uintptr_t data)
@@ -540,28 +541,27 @@ ngx_http_ssl_ja4(ngx_http_request_t *r,
     ngx_http_ssl_ja4_ctx_t *ctx;
     ngx_ssl_ja4_t ja4;
 
-    if (r->connection == NULL)
-    {
+    if (r->connection == NULL) {
         return NGX_OK;
     }
-    if (ngx_ssl_ja4(r->connection, r->pool, &ja4) == NGX_DECLINED)
-    {
+
+    if (ngx_ssl_ja4(r->connection, r->pool, &ja4) == NGX_DECLINED) {
         return NGX_ERROR;
     }
 
-    ctx = ngx_http_get_module_ctx(r, ngx_http_ssl_ja4_module);
+    ctx = ngx_get_or_create_ja4_ctx (r);
     if (ctx == NULL) {
-        ngx_int_t res = ngx_http_ssl_ja4_init_ctx(r, &ctx);
-        if (res != NGX_OK) {
-            return NGX_ERROR;
-        }
+        return NGX_ERROR;
     }
 
     if (ctx->ja4.len == 0) {
+
         ngx_str_t fp = ngx_null_string;
+
         ngx_ssl_ja4_fp(r->pool, &ja4, &fp);
         ctx->ja4.len = fp.len;
         ctx->ja4.data = ngx_pnalloc(r->pool, fp.len);
+
         ngx_memcpy(ctx->ja4.data, fp.data, fp.len);
     }
 
@@ -738,12 +738,9 @@ ngx_http_ssl_ja4_string(ngx_http_request_t *r,
         return NGX_ERROR;
     }
 
-    ctx = ngx_http_get_module_ctx(r, ngx_http_ssl_ja4_module);
+    ctx = ngx_get_or_create_ja4_ctx (r);
     if (ctx == NULL) {
-        ngx_int_t res = ngx_http_ssl_ja4_init_ctx(r, &ctx);
-        if (res != NGX_OK) {
-            return NGX_ERROR;
-        }
+        return NGX_ERROR;
     }
 
     if (ctx->ja4_string.len == 0) {
@@ -867,12 +864,9 @@ ngx_http_ssl_ja4one(ngx_http_request_t *r,
         return NGX_ERROR;
     }
 
-    ctx = ngx_http_get_module_ctx(r, ngx_http_ssl_ja4_module);
+    ctx = ngx_get_or_create_ja4_ctx (r);
     if (ctx == NULL) {
-        ngx_int_t res = ngx_http_ssl_ja4_init_ctx(r, &ctx);
-        if (res != NGX_OK) {
-            return NGX_ERROR;
-        }
+        return NGX_ERROR;
     }
 
     if (ctx->ja4one.len == 0) {
@@ -1813,29 +1807,27 @@ ngx_module_t ngx_http_ssl_ja4_module = {
     NULL,                         /* exit master */
     NGX_MODULE_V1_PADDING};
 
-static ngx_int_t
-ngx_http_ssl_ja4_init_ctx(ngx_http_request_t *r, ngx_http_ssl_ja4_ctx_t **ctx_out)
+
+static ngx_http_ssl_ja4_ctx_t*
+ngx_get_or_create_ja4_ctx (ngx_http_request_t *r)
 {
-    ngx_http_ssl_ja4_ctx_t *ctx;
+    ngx_http_ssl_ja4_ctx_t *ctx = NULL;
+
     ctx = ngx_http_get_module_ctx(r, ngx_http_ssl_ja4_module);
 
-    if (ctx != NULL && ctx_out) {
-        *ctx_out = ctx;
-        return NGX_OK;
-    }
-
-    ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_ssl_ja4_ctx_t));
     if (ctx == NULL) {
-        return NGX_ERROR;
+
+        ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_ssl_ja4_ctx_t));
+
+        if (ctx != NULL) {
+
+            ctx->ja4 = (ngx_str_t){0, NULL};
+            ctx->ja4_string = (ngx_str_t){0, NULL};
+            ctx->ja4one = (ngx_str_t){0, NULL};
+
+            ngx_http_set_ctx (r, ctx, ngx_http_ssl_ja4_module);
+        }
     }
-    ngx_http_set_ctx(r, ctx, ngx_http_ssl_ja4_module);
-    ctx->ja4 = (ngx_str_t){0, NULL};
-    ctx->ja4_string = (ngx_str_t){0, NULL};
-    ctx->ja4one = (ngx_str_t){0, NULL};
 
-    ngx_http_set_ctx(r, ctx, ngx_http_ssl_ja4_module);
-    if (ctx_out)
-        *ctx_out = ctx;
-
-    return NGX_OK;
+    return ctx;
 }
