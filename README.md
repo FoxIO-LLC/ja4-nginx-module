@@ -25,6 +25,25 @@ You can also build from source with:
 1. `docker build -t ja4-nginx:source .`
 2. `docker run -p 80:80 -p 443:443 ja4-nginx:source`
 
+## Testing
+
+Integration tests run inside Docker and validate the module’s behavior against predefined scenarios using golden files in `testdata/`.
+
+Run tests:
+
+```bash
+pytest
+```
+
+Update golden files:
+
+```bash
+pytest --record
+```
+
+Current coverage includes various TLS versions, HTTP protocols, and ALPN/cipher/extension combinations.
+
+
 ## Docker
 
 We publish and host Docker images of release versions on GitHub Container Registry. You can pull the image with the following command:
