@@ -229,6 +229,13 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         ngx_memcpy(ja4->cipher_hash_truncated, ja4->cipher_hash, 12);
         ja4->cipher_hash_truncated[12] = '\0'; // Null-terminate the truncated hex string
     }
+    else
+    {
+        ngx_memset(ja4->cipher_hash, '0', 2 * SHA256_DIGEST_LENGTH);
+        ja4->cipher_hash[2 * SHA256_DIGEST_LENGTH] = '\0';
+        ngx_memset(ja4->cipher_hash_truncated, '0', 12);
+        ja4->cipher_hash_truncated[12] = '\0'; // Null-terminate the truncated hex string
+    }
 
     /* Extensions */
     ja4->extensions = NULL;
@@ -399,6 +406,13 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         ngx_memcpy(ja4->extension_hash_truncated, hex_hash_truncated, 12);
         ja4->extension_hash_truncated[12] = '\0';
     }
+    else
+    {
+        ngx_memset(ja4->extension_hash, '0', 2 * SHA256_DIGEST_LENGTH);
+        ja4->extension_hash[2 * SHA256_DIGEST_LENGTH] = '\0';
+        ngx_memset(ja4->extension_hash_truncated, '0', 12);
+        ja4->extension_hash_truncated[12] = '\0'; // Null-terminate the truncated hex string
+    }
 
     // generate hash for extensions_no_psk
     // also doesn't include signature algorithms
@@ -441,6 +455,13 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
         // Copy the first 6 bytes (12 characters) for the truncated hash
         ngx_memcpy(ja4->extension_hash_no_psk_truncated, hex_hash_truncated, 12);
         ja4->extension_hash_no_psk_truncated[12] = '\0';
+    }
+    else
+    {
+        ngx_memset(ja4->extension_hash_no_psk, '0', 2 * SHA256_DIGEST_LENGTH);
+        ja4->extension_hash_no_psk[2 * SHA256_DIGEST_LENGTH] = '\0';
+        ngx_memset(ja4->extension_hash_no_psk_truncated, '0', 12);
+        ja4->extension_hash_no_psk_truncated[12] = '\0'; // Null-terminate the truncated hex string
     }
     return NGX_OK;
 }
