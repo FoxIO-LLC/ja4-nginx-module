@@ -1,118 +1,11 @@
 diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
-index a7b389444..6a21decab 100644
+index 58f052cab..05514c5b3 100644
 --- a/src/event/ngx_event_openssl.c
 +++ b/src/event/ngx_event_openssl.c
-@@ -1703,6 +1703,222 @@ ngx_ssl_set_session(ngx_connection_t *c, ngx_ssl_session_t *session)
+@@ -1837,6 +1837,114 @@ ngx_ssl_set_session(ngx_connection_t *c, ngx_ssl_session_t *session)
      return NGX_OK;
  }
  
-+// adds ciphers to the ssl object for ja4 fingerprint
-+ngx_int_t
-+ngx_SSL_client_features(ngx_connection_t *c) {
-+
-+    SSL                           *s = NULL;
-+
-+    if (c == NULL) {
-+        return NGX_ERROR;
-+    }
-+    s = c->ssl->connection;
-+
-+    uint8_t  *u_ciphers;
-+
-+    int tls_cipher_len = SSL_get0_raw_cipherlist (c->ssl->connection, NULL);
-+    if (tls_cipher_len == 0) {
-+        return NGX_ERROR;
-+    }
-+
-+    int len = SSL_get0_raw_cipherlist (c->ssl->connection, &u_ciphers);
-+    len /= tls_cipher_len;
-+    if (len == 0) {
-+        return NGX_ERROR;
-+    }
-+
-+    c->ssl->ciphers = ngx_pnalloc (c->pool, len * sizeof(char *));
-+    if (c->ssl->ciphers == NULL) {
-+        return NGX_ERROR;
-+    }
-+
-+    c->ssl->ciphers_sz = 0;
-+    for (int i = 0; i < len; i++) {
-+        const SSL_CIPHER  *cipher = SSL_CIPHER_find(c->ssl->connection, u_ciphers + i * tls_cipher_len);
-+
-+        if (!cipher) {
-+            continue; // Probably - GREASE value
-+        }
-+        uint16_t id = SSL_CIPHER_get_id (cipher) & 0xffff;
-+        /*
-+         * Convert the cipher ID to a hexadecimal string Buffer to
-+         * hold the hexadecimal string (4 digits + null terminator)
-+         **/
-+        char hex_str[5];
-+        snprintf (hex_str, sizeof(hex_str), "%04x", id);
-+        /* Allocate memory for the hex string and copy it */
-+        c->ssl->ciphers [c->ssl->ciphers_sz] = ngx_pnalloc(c->pool, sizeof(hex_str));
-+        if (c->ssl->ciphers[c->ssl->ciphers_sz] == NULL) {
-+            /* Handle allocation failure */
-+            for (size_t j = 0; j < c->ssl->ciphers_sz; j++) {
-+                ngx_pfree(c->pool, c->ssl->ciphers[j]);
-+            }
-+            ngx_pfree(c->pool, c->ssl->ciphers);
-+            c->ssl->ciphers = NULL;
-+            return NGX_ERROR;
-+        }
-+        ngx_memcpy (c->ssl->ciphers [c->ssl->ciphers_sz], hex_str, sizeof(hex_str));
-+        c->ssl->ciphers_sz++;
-+    }
-+
-+#if (NGX_DEBUG)
-+    ngx_log_debug (NGX_LOG_DEBUG_EVENT, c->log, 0, "ja4: unsorted ciphers_suite:");
-+    for (int i = 0; i < (int) c->ssl->ciphers_sz; i++)
-+        ngx_log_debug2 (NGX_LOG_DEBUG_EVENT, c->log, 0, "-- [%2d]: %s", i, c->ssl->ciphers[i]);
-+#endif
-+
-+    /* Signature Algorithms */
-+    int num_sigalgs = SSL_get_sigalgs(s, 0, NULL, NULL, NULL, NULL, NULL);
-+    if (num_sigalgs > 0) {
-+        // Allocate memory for pointers to strings (each will hold a hex string)
-+        char **sigalgs_hex_strings = ngx_pnalloc(c->pool, num_sigalgs * sizeof(char *));
-+        if (sigalgs_hex_strings == NULL) {
-+            ngx_log_error(NGX_LOG_ERR, c->log, 0, "Failed to allocate memory for signature algorithm hex strings");
-+            return NGX_ERROR;
-+        }
-+
-+        for (int i = 0; i < num_sigalgs; ++i) {
-+            int psign, phash, psignhash;
-+            unsigned char rsig, rhash;
-+            SSL_get_sigalgs(s, i, &psign, &phash, &psignhash, &rsig, &rhash);
-+
-+            // Format as a hexadecimal string
-+            char hex_string[5]; // Enough for "XXXX" + null terminator
-+            snprintf(hex_string, sizeof(hex_string), "%02x%02x", rhash, rsig);
-+
-+            // Allocate memory for the hex string
-+            sigalgs_hex_strings[i] = ngx_pnalloc(c->pool, sizeof(hex_string));
-+            if (sigalgs_hex_strings[i] == NULL) {
-+                // Handle allocation failure and clean up previously allocated memory
-+                for (int j = 0; j < i; j++) {
-+                    ngx_pfree(c->pool, sigalgs_hex_strings[j]);
-+                }
-+                ngx_pfree(c->pool, sigalgs_hex_strings);
-+                sigalgs_hex_strings = NULL;
-+                ngx_log_error(NGX_LOG_ERR, c->log, 0, "Failed to allocate memory for a signature algorithm hex string");
-+                return NGX_ERROR;
-+            }
-+
-+            // Copy the hex string into allocated memory
-+            ngx_memcpy(sigalgs_hex_strings[i], hex_string, sizeof(hex_string));
-+        }
-+
-+        // Save the array of hex strings to your struct
-+        c->ssl->sigalgs_hash_values = sigalgs_hex_strings;
-+    }
-+
-+    c->ssl->sigalgs_sz = num_sigalgs;
-+    return NGX_OK;
-+}
 +// adds extensions to the ssl object for ja4 fingerprint
 +int
 +ngx_SSL_early_cb_fn(SSL *s, int *al, void *arg) {
@@ -143,9 +36,7 @@ index a7b389444..6a21decab 100644
 +
 +    c->ssl->extensions_sz = 0;
 +    c->ssl->extensions = NULL;
-+    got_extensions = SSL_client_hello_getall_extensions_present(s,
-+                                                       &ext_out,
-+                                                       &ext_len);
++    got_extensions = SSL_client_hello_get1_extensions_present (s, &ext_out, &ext_len);
 +
 +    if (!got_extensions) {
 +        return 1;
@@ -194,7 +85,8 @@ index a7b389444..6a21decab 100644
 +                        }
 +                    }
 +                    c->ssl->highest_supported_tls_client_version = highest_supported_tls_client_version;
-+                    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0, "Highest TLS protocol version found: %04x", highest_supported_tls_client_version);
++                    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0,
++                            "Highest TLS protocol version found: %04xd", highest_supported_tls_client_version);
 +                }
 +            }
 +
@@ -215,7 +107,7 @@ index a7b389444..6a21decab 100644
 +    }
 +
 +    for (size_t i = 0; i < ext_len; i++) {
-+        ngx_log_debug2(NGX_LOG_DEBUG_EVENT, c->log, 0, "c->ssl->extensions[%zu] = %s", i, c->ssl->extensions[i]);
++        ngx_log_debug2 (NGX_LOG_DEBUG_EVENT, c->log, 0, "c->ssl->extensions[%2d] = %s", i, c->ssl->extensions[i]);
 +    }
 +
 +    OPENSSL_free(ext_out);
@@ -225,30 +117,21 @@ index a7b389444..6a21decab 100644
  
  ngx_int_t
  ngx_ssl_handshake(ngx_connection_t *c)
-@@ -1723,12 +1932,16 @@ ngx_ssl_handshake(ngx_connection_t *c)
+@@ -1857,6 +1965,9 @@ ngx_ssl_handshake(ngx_connection_t *c)
  
      ngx_ssl_clear_error(c->log);
  
 +    // client hello callback function on the session context, ja4 extensions
-+    SSL_CTX_set_client_hello_cb(c->ssl->session_ctx, ngx_SSL_early_cb_fn, c);
++    SSL_CTX_set_client_hello_cb (c->ssl->session_ctx, ngx_SSL_early_cb_fn, c);
 +
      n = SSL_do_handshake(c->ssl->connection);
  
--    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0, "SSL_do_handshake: %d", n);
- 
-+    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0, "SSL_do_handshake: %d", n);
-     if (n == 1) {
--
-+        // ja4 cipher suites
-+        ngx_SSL_client_features(c);
-         if (ngx_handle_read_event(c->read, 0) != NGX_OK) {
-             return NGX_ERROR;
-         }
+     ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0, "SSL_do_handshake: %d", n);
 diff --git a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl.h
-index 9e68deb44..9610be790 100644
+index 4c829933c..4c90486d1 100644
 --- a/src/event/ngx_event_openssl.h
 +++ b/src/event/ngx_event_openssl.h
-@@ -146,6 +146,25 @@ struct ngx_ssl_connection_s {
+@@ -145,6 +145,25 @@ struct ngx_ssl_connection_s {
      unsigned                    in_ocsp:1;
      unsigned                    early_preread:1;
      unsigned                    write_blocked:1;
@@ -274,11 +157,32 @@ index 9e68deb44..9610be790 100644
  };
  
  
+@@ -378,4 +397,6 @@ extern int  ngx_ssl_index;
+ extern int  ngx_ssl_certificate_name_index;
+ 
+ 
++int ngx_SSL_early_cb_fn (SSL *s, int *al, void *arg);
++
+ #endif /* _NGX_EVENT_OPENSSL_H_INCLUDED_ */
+diff --git a/src/event/quic/ngx_event_quic_ssl.c b/src/event/quic/ngx_event_quic_ssl.c
+index daf2fe889..05f94f6ff 100644
+--- a/src/event/quic/ngx_event_quic_ssl.c
++++ b/src/event/quic/ngx_event_quic_ssl.c
+@@ -412,6 +412,9 @@ ngx_quic_ssl_handshake(ngx_connection_t *c)
+ 
+     ssl_conn = c->ssl->connection;
+ 
++    /* ja4: Setting up a callback to collect TLS extensions */
++    SSL_CTX_set_client_hello_cb (c->ssl->session_ctx, ngx_SSL_early_cb_fn, c);
++
+     n = SSL_do_handshake(ssl_conn);
+ 
+     ngx_log_debug1(NGX_LOG_DEBUG_EVENT, c->log, 0, "SSL_do_handshake: %d", n);
 diff --git a/src/http/modules/ngx_http_ssl_module.c b/src/http/modules/ngx_http_ssl_module.c
-index dbfe5c08b..80589a3a4 100644
+index f7efc3a99..704744fa9 100644
 --- a/src/http/modules/ngx_http_ssl_module.c
 +++ b/src/http/modules/ngx_http_ssl_module.c
-@@ -440,6 +440,13 @@ ngx_http_ssl_alpn_select(ngx_ssl_conn_t *ssl_conn, const unsigned char **out,
+@@ -466,6 +466,13 @@ ngx_http_ssl_alpn_select(ngx_ssl_conn_t *ssl_conn, const unsigned char **out,
      ngx_connection_t        *c;
  
      c = ngx_ssl_get_connection(ssl_conn);
