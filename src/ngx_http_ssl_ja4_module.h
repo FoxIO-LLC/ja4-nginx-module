@@ -291,11 +291,11 @@ ngx_ssl_ja4_detail_print(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 
     /* Version */
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
-                   pool->log, 0, "ssl_ja4: Version:  %d\n", ja4->version);
+                   pool->log, 0, "ssl_ja4: Version:  %s", ja4->version);
 
     /* Ciphers */
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
-                   pool->log, 0, "ssl_ja4: ciphers: length: %d\n",
+                   pool->log, 0, "ssl_ja4: ciphers: length: %d",
                    ja4->ciphers_sz);
 
     for (i = 0; i < ja4->ciphers_sz; ++i)
@@ -307,37 +307,37 @@ ngx_ssl_ja4_detail_print(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 
     // cipher hash
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
-                   pool->log, 0, "ssl_ja4: cipher hash: %s\n",
+                   pool->log, 0, "ssl_ja4: cipher hash: %s",
                    ja4->cipher_hash);
 
     // cipher hash truncated
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
-                   pool->log, 0, "ssl_ja4: cipher hash truncated: %s\n",
+                   pool->log, 0, "ssl_ja4: cipher hash truncated: %s",
                    ja4->cipher_hash_truncated);
 
     // extension hash
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
-                   pool->log, 0, "ssl_ja4: extension hash: %s\n",
+                   pool->log, 0, "ssl_ja4: extension hash: %s",
                    ja4->extension_hash);
 
     // extension hash truncated
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
-                   pool->log, 0, "ssl_ja4: extension hash truncated: %s\n",
+                   pool->log, 0, "ssl_ja4: extension hash truncated: %s",
                    ja4->extension_hash_truncated);
 
     // extension hash no psk
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
-                   pool->log, 0, "ssl_ja4: extension hash no psk: %s\n",
+                   pool->log, 0, "ssl_ja4: extension hash no psk: %s",
                    ja4->extension_hash_no_psk);
 
     // extension hash no psk truncated
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
-                   pool->log, 0, "ssl_ja4: extension hash no psk truncated: %s\n",
+                   pool->log, 0, "ssl_ja4: extension hash no psk truncated: %s",
                    ja4->extension_hash_no_psk_truncated);
 
     /* Extensions */
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
-                   pool->log, 0, "ssl_ja4: extensions: length: %d\n",
+                   pool->log, 0, "ssl_ja4: extensions: length: %d",
                    ja4->extensions_count);
 
     for (i = 0; i < ja4->extensions_sz; ++i)
@@ -349,7 +349,7 @@ ngx_ssl_ja4_detail_print(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 
     /* Extensions no PSK */
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
-                   pool->log, 0, "ssl_ja4: extensions_no_psk: length: %d\n",
+                   pool->log, 0, "ssl_ja4: extensions_no_psk: length: %d",
                    ja4->extensions_no_psk_count);
 
     for (i = 0; i < ja4->extensions_no_psk_count; ++i)
@@ -361,7 +361,7 @@ ngx_ssl_ja4_detail_print(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 
     // Signature Algorithms
     ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
-                   pool->log, 0, "ssl_ja4: sigalgs: length: %d\n",
+                   pool->log, 0, "ssl_ja4: sigalgs: length: %d",
                    ja4->sigalgs_sz);
 
     for (i = 0; i < ja4->sigalgs_sz; ++i)
