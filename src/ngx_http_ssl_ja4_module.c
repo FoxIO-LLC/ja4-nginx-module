@@ -179,7 +179,8 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
             return NGX_ERROR;
         }
 
-        ngx_memcpy(ja4->ciphers[*k], &hex, sizeof (hex));
+        /* hex is 4 chars + NUL; copy only the used portion */
+        ngx_memcpy(ja4->ciphers[*k], hex, 5);
         (void)(*k)++;
     }
 
@@ -287,7 +288,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 
     /* Signature Algorithms */
 
-    int num_sigalgs = SSL_get_sigalgs (ssl, -1, NULL, NULL, NULL, NULL, NULL);
+    int num_sigalgs = SSL_get_sigalgs (ssl, 0, NULL, NULL, NULL, NULL, NULL);
 
     if (num_sigalgs > -1) {
 
@@ -297,7 +298,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
             return NGX_ERROR;
         }
 
-        for (int i = -1; i < num_sigalgs; ++i) {
+        for (int i = 0; i < num_sigalgs; ++i) {
 
             int psign, phash, psignhash;
             unsigned char rsig, rhash;
