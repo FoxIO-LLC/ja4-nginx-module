@@ -22,8 +22,8 @@ RUN adduser -D dswebuser
 # -------- Stage 2: Precompiled sources for caching --------
 FROM base AS build-cache
 
-ARG NGINX_VERSION=1.25.0
-ARG OPENSSL_VERSION=3.2.1
+ARG NGINX_VERSION=1.28.1
+ARG OPENSSL_VERSION=3.5.4
 
 WORKDIR /tmp
 
@@ -52,8 +52,8 @@ RUN ./configure \
 # -------- Stage 3: Final build with actual module and patches --------
 FROM base AS final
 
-ARG NGINX_VERSION=1.25.0
-ARG OPENSSL_VERSION=3.2.1
+ARG NGINX_VERSION=1.28.1
+ARG OPENSSL_VERSION=3.5.4
 
 WORKDIR /tmp
 
