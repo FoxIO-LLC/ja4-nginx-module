@@ -140,15 +140,15 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     ja4->ciphers_sz = 0;
 
 
-    int tls_cipher_len = SSL_get0_raw_cipherlist (c->ssl->connection, NULL);
-
-    STACK_OF(SSL_CIPHER) * cp;
-    cp = SSL_get_client_ciphers (c->ssl->connection);
-    if (!cp) {
+    const unsigned char *raw_ciphers = NULL;
+    size_t tls_cipher_len = SSL_get0_raw_cipherlist(ssl, &raw_ciphers);
+    if (!raw_ciphers || tls_cipher_len < 2) {
         return NGX_DECLINED;
     }
 
-    ja4->ciphers = ngx_pnalloc (pool, sk_SSL_CIPHER_num(cp) * sizeof(char*));
+    size_t raw_cipher_count = tls_cipher_len / 2;
+
+    ja4->ciphers = ngx_pnalloc(pool, raw_cipher_count * sizeof(char *));
     if (ja4->ciphers == NULL) {
         return NGX_DECLINED;
     }
@@ -161,13 +161,12 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     }
 
     size_t *k = &ja4->ciphers_sz;
-    for (i = 0; i < (size_t)sk_SSL_CIPHER_num(cp); i++)
+    for (i = 0; i + 1 < tls_cipher_len; i += 2)
     {
-        char hex [tls_cipher_len * sizeof (char) * 2 + 1];
-        const SSL_CIPHER *c = sk_SSL_CIPHER_value(cp, i);
-        u_int16_t id = SSL_CIPHER_get_protocol_id(c);
+        char hex[5];
+        u_int16_t id = ((u_int16_t) raw_ciphers[i] << 8) | raw_ciphers[i + 1];
 
-        ngx_sprintf ((u_char *)&hex[0], "%04xd", id);
+        ngx_sprintf((u_char *)&hex[0], "%04xd", id);
         hex [4] = '\0';
         if (ngx_ssl_ja4_is_ext_greased (hex)) {
             continue;
