@@ -1,3 +1,4 @@
+import re
 import subprocess
 import pytest
 from pathlib import Path
@@ -14,6 +15,7 @@ CASES = [
     ("tls12_h11",  ["--http1.1", "--tls-max", "1.2"]),
     ("no_sni_ip",  []),  # IP literal to avoid SNI
     ("ech_alps",   ["--python-test"]),  # Test ECH and ALPS extensions together
+    ("invalid_cipher_count", ["--go-invalid-cipher-test"]),  # Unknown cipher in list
 ]
 
 EXPECTED_DIR = Path(__file__).parent / "testdata"
@@ -34,6 +36,15 @@ def run_curl(name: str, args: list[str]) -> str:
         cmd = [sys.executable, str(test_script)]
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
         return result.stdout
+
+    # Go uTLS test for invalid cipher counting
+    if args and args[0] == "--go-invalid-cipher-test":
+        utls_dir = Path(__file__).parent / "utls"
+        cmd = ["go", "run", "./invalid_cipher_count.go"]
+        result = subprocess.run(
+            cmd, check=True, capture_output=True, text=True, cwd=utls_dir
+        )
+        return result.stdout
     
     # Standard curl test
     if name == "no_sni_ip":
@@ -52,6 +63,23 @@ def run_curl(name: str, args: list[str]) -> str:
 def test_integration(name, curl_args, request):
     output = run_curl(name, curl_args)
     print(f"\n=== Output for {name} ===\n{output}")
+
+    if name == "invalid_cipher_count":
+        lines = output.splitlines()
+        expected_line = next((l for l in lines if l.startswith("EXPECTED_CIPHER_COUNT=")), None)
+        assert expected_line is not None, "Missing EXPECTED_CIPHER_COUNT line"
+        expected_count = int(expected_line.split("=", 1)[1])
+
+        match = re.search(r"\bJA4:\s*([A-Za-z0-9_]+)", output)
+        assert match is not None, f"Missing JA4 line in output:\n{output}"
+        ja4 = match.group(1)
+        assert len(ja4) >= 6, f"Unexpected JA4 string: {ja4!r}"
+        actual_count = int(ja4[4:6])
+        assert actual_count == expected_count, (
+            f"Cipher count mismatch: expected {expected_count}, got {actual_count}"
+        )
+        return
+
     expected_path = EXPECTED_DIR / f"{name}.txt"
     if request.config.getoption("--record"):
         expected_path.write_text(output)
