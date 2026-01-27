@@ -6,25 +6,26 @@ from pathlib import Path
 # Pinned curl image for reproducible TLS stack
 CURL_IMG = "alpine/curl:8.14.1@sha256:4007cdf991c197c3412b5af737a916a894809273570b0c2bb93d295342fc23a2"
 
-# URL for curl
+# URL for curl cases
 URL = "https://localhost"
 
-# Test matrix: (case_name, curl_args)
+# Test matrix: (case_name, case_args)
 CASES = [
     ("tls13_h2",   ["--http2", "--tls-max", "1.3"]),
     ("tls12_h11",  ["--http1.1", "--tls-max", "1.2"]),
     ("no_sni_ip",  []),  # IP literal to avoid SNI
     ("ech_alps",   ["--python-test"]),  # Test ECH and ALPS extensions together
     ("invalid_cipher_count", ["--go-invalid-cipher-test"]),  # Unknown cipher in list
+    ("scsv_inclusion", ["--go-scsv-test"]),  # TLS_EMPTY_RENEGOTIATION_INFO_SCSV handling
 ]
 
 EXPECTED_DIR = Path(__file__).parent / "testdata"
 EXPECTED_DIR.mkdir(exist_ok=True)
 
-def run_curl(name: str, args: list[str]) -> str:
+def run_case(name: str, args: list[str]) -> str:
     """
-    Run curl in the pinned container with given args,
-    or run Python test script for ECH/ALPS test.
+    Run the selected case: curl in the pinned container,
+    or a Python/Go test client.
     Capture stdout and return it as a string.
     """
     # Check if this is the Python test (ECH+ALPS)
@@ -40,7 +41,15 @@ def run_curl(name: str, args: list[str]) -> str:
     # Go uTLS test for invalid cipher counting
     if args and args[0] == "--go-invalid-cipher-test":
         utls_dir = Path(__file__).parent / "utls"
-        cmd = ["go", "run", "./invalid_cipher_count.go"]
+        cmd = ["go", "run", ".", "--mode", "invalid"]
+        result = subprocess.run(
+            cmd, check=True, capture_output=True, text=True, cwd=utls_dir
+        )
+        return result.stdout
+
+    if args and args[0] == "--go-scsv-test":
+        utls_dir = Path(__file__).parent / "utls"
+        cmd = ["go", "run", ".", "--mode", "scsv"]
         result = subprocess.run(
             cmd, check=True, capture_output=True, text=True, cwd=utls_dir
         )
@@ -59,12 +68,12 @@ def run_curl(name: str, args: list[str]) -> str:
     result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     return result.stdout
 
-@pytest.mark.parametrize("name,curl_args", CASES)
-def test_integration(name, curl_args, request):
-    output = run_curl(name, curl_args)
+@pytest.mark.parametrize("name,case_args", CASES)
+def test_integration(name, case_args, request):
+    output = run_case(name, case_args)
     print(f"\n=== Output for {name} ===\n{output}")
 
-    if name == "invalid_cipher_count":
+    if name in {"invalid_cipher_count", "scsv_inclusion"}:
         lines = output.splitlines()
         expected_line = next((l for l in lines if l.startswith("EXPECTED_CIPHER_COUNT=")), None)
         assert expected_line is not None, "Missing EXPECTED_CIPHER_COUNT line"
@@ -78,6 +87,16 @@ def test_integration(name, curl_args, request):
         assert actual_count == expected_count, (
             f"Cipher count mismatch: expected {expected_count}, got {actual_count}"
         )
+
+        if name == "scsv_inclusion":
+            ja4_string_line = next((l for l in lines if l.strip().startswith("JA4 String:")), None)
+            assert ja4_string_line is not None, "Missing JA4 String line"
+            ja4_string = ja4_string_line.split(":", 1)[1].strip()
+            parts = ja4_string.split("_")
+            assert len(parts) >= 2, f"Unexpected JA4 String format: {ja4_string!r}"
+            cipher_list = parts[1]
+            ciphers = cipher_list.split(",") if cipher_list else []
+            assert "00ff" in ciphers, "TLS_EMPTY_RENEGOTIATION_INFO_SCSV missing from JA4 cipher list"
         return
 
     expected_path = EXPECTED_DIR / f"{name}.txt"
