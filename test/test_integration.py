@@ -6,10 +6,10 @@ from pathlib import Path
 # Pinned curl image for reproducible TLS stack
 CURL_IMG = "alpine/curl:8.14.1@sha256:4007cdf991c197c3412b5af737a916a894809273570b0c2bb93d295342fc23a2"
 
-# URL for curl
+# URL for curl cases
 URL = "https://localhost"
 
-# Test matrix: (case_name, curl_args)
+# Test matrix: (case_name, case_args)
 CASES = [
     ("tls13_h2",   ["--http2", "--tls-max", "1.3"]),
     ("tls12_h11",  ["--http1.1", "--tls-max", "1.2"]),
@@ -21,10 +21,10 @@ CASES = [
 EXPECTED_DIR = Path(__file__).parent / "testdata"
 EXPECTED_DIR.mkdir(exist_ok=True)
 
-def run_curl(name: str, args: list[str]) -> str:
+def run_case(name: str, args: list[str]) -> str:
     """
-    Run curl in the pinned container with given args,
-    or run Python test script for ECH/ALPS test.
+    Run the selected case: curl in the pinned container,
+    or a Python/Go test client.
     Capture stdout and return it as a string.
     """
     # Check if this is the Python test (ECH+ALPS)
@@ -59,9 +59,9 @@ def run_curl(name: str, args: list[str]) -> str:
     result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     return result.stdout
 
-@pytest.mark.parametrize("name,curl_args", CASES)
-def test_integration(name, curl_args, request):
-    output = run_curl(name, curl_args)
+@pytest.mark.parametrize("name,case_args", CASES)
+def test_integration(name, case_args, request):
+    output = run_case(name, case_args)
     print(f"\n=== Output for {name} ===\n{output}")
 
     if name == "invalid_cipher_count":
