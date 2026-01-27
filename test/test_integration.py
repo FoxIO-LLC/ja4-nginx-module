@@ -16,6 +16,7 @@ CASES = [
     ("no_sni_ip",  []),  # IP literal to avoid SNI
     ("ech_alps",   ["--python-test"]),  # Test ECH and ALPS extensions together
     ("invalid_cipher_count", ["--go-invalid-cipher-test"]),  # Unknown cipher in list
+    ("scsv_inclusion", ["--go-scsv-test"]),  # TLS_EMPTY_RENEGOTIATION_INFO_SCSV handling
 ]
 
 EXPECTED_DIR = Path(__file__).parent / "testdata"
@@ -40,7 +41,15 @@ def run_case(name: str, args: list[str]) -> str:
     # Go uTLS test for invalid cipher counting
     if args and args[0] == "--go-invalid-cipher-test":
         utls_dir = Path(__file__).parent / "utls"
-        cmd = ["go", "run", "./invalid_cipher_count.go"]
+        cmd = ["go", "run", ".", "--mode", "invalid"]
+        result = subprocess.run(
+            cmd, check=True, capture_output=True, text=True, cwd=utls_dir
+        )
+        return result.stdout
+
+    if args and args[0] == "--go-scsv-test":
+        utls_dir = Path(__file__).parent / "utls"
+        cmd = ["go", "run", ".", "--mode", "scsv"]
         result = subprocess.run(
             cmd, check=True, capture_output=True, text=True, cwd=utls_dir
         )
@@ -64,7 +73,7 @@ def test_integration(name, case_args, request):
     output = run_case(name, case_args)
     print(f"\n=== Output for {name} ===\n{output}")
 
-    if name == "invalid_cipher_count":
+    if name in {"invalid_cipher_count", "scsv_inclusion"}:
         lines = output.splitlines()
         expected_line = next((l for l in lines if l.startswith("EXPECTED_CIPHER_COUNT=")), None)
         assert expected_line is not None, "Missing EXPECTED_CIPHER_COUNT line"
@@ -78,6 +87,16 @@ def test_integration(name, case_args, request):
         assert actual_count == expected_count, (
             f"Cipher count mismatch: expected {expected_count}, got {actual_count}"
         )
+
+        if name == "scsv_inclusion":
+            ja4_string_line = next((l for l in lines if l.strip().startswith("JA4 String:")), None)
+            assert ja4_string_line is not None, "Missing JA4 String line"
+            ja4_string = ja4_string_line.split(":", 1)[1].strip()
+            parts = ja4_string.split("_")
+            assert len(parts) >= 2, f"Unexpected JA4 String format: {ja4_string!r}"
+            cipher_list = parts[1]
+            ciphers = cipher_list.split(",") if cipher_list else []
+            assert "00ff" in ciphers, "TLS_EMPTY_RENEGOTIATION_INFO_SCSV missing from JA4 cipher list"
         return
 
     expected_path = EXPECTED_DIR / f"{name}.txt"
