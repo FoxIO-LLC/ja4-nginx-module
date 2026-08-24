@@ -327,3 +327,132 @@ GET /t
 --- no_error_log
 [error]
 
+
+
+=== TEST 18: ja4h_spec_two_cookie_headers
+# Two Cookie lines. Count ignores both (still 02). b includes both Cookie
+# names. c/d are sorted names/pairs from both lines (same as TEST 13).
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "ja4h=$http_ssl_ja4h\n";
+    }
+--- more_headers
+Cookie: z=9
+Cookie: a=1
+--- request
+GET /t
+--- response_body_like chomp
+^ja4h=ge11cn020000_464c4be3d522_9c0ada37bf74_509a74b46377$
+--- no_error_log
+[error]
+
+
+
+=== TEST 19: ja4h_spec_cookie_no_equals
+# Cookie token with no "=": field and fields+values are both the name.
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "ja4h=$http_ssl_ja4h\n";
+    }
+--- more_headers
+Cookie: flag
+--- request
+GET /t
+--- response_body_like chomp
+^ja4h=ge11cn020000_732b78a28558_807d0fbcae7c_807d0fbcae7c$
+--- no_error_log
+[error]
+
+
+
+=== TEST 20: ja4h_accept_language_empty
+# Header present (count 03) but empty value keeps default 0000.
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "ja4h=$http_ssl_ja4h\n";
+    }
+--- more_headers
+Accept-Language:
+--- request
+GET /t
+--- response_body_like chomp
+^ja4h=ge11nn030000_93b341afb8ea_e3b0c44298fc_e3b0c44298fc$
+--- no_error_log
+[error]
+
+
+
+=== TEST 21: ja4h_accept_language_q_only
+# No language subtag; first char ';' stops the loop -> 0000.
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "ja4h=$http_ssl_ja4h\n";
+    }
+--- more_headers
+Accept-Language: ;q=0.9
+--- request
+GET /t
+--- response_body_like chomp
+^ja4h=ge11nn030000_93b341afb8ea_e3b0c44298fc_e3b0c44298fc$
+--- no_error_log
+[error]
+
+
+
+=== TEST 22: ja4h_accept_language_truncated
+# More than 4 kept chars: english -> engl.
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "ja4h=$http_ssl_ja4h\n";
+    }
+--- more_headers
+Accept-Language: english
+--- request
+GET /t
+--- response_body_like chomp
+^ja4h=ge11nn03engl_93b341afb8ea_e3b0c44298fc_e3b0c44298fc$
+--- no_error_log
+[error]
+
+
+
+=== TEST 23: ja4h_spec_headers_second_part
+# nginx nalloc=20: Host, Connection, X-0 .. X-17 fill the first part;
+# X-18 is on part.next. Count must be 21, not first-part 20.
+# b still walks next (HostConnectionX-0..X-18).
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "ja4h=$http_ssl_ja4h\n";
+    }
+--- more_headers
+X-0: 1
+X-1: 1
+X-2: 1
+X-3: 1
+X-4: 1
+X-5: 1
+X-6: 1
+X-7: 1
+X-8: 1
+X-9: 1
+X-10: 1
+X-11: 1
+X-12: 1
+X-13: 1
+X-14: 1
+X-15: 1
+X-16: 1
+X-17: 1
+X-18: 1
+--- request
+GET /t
+--- response_body_like chomp
+^ja4h=ge11nn210000_bfff74643b3e_e3b0c44298fc_e3b0c44298fc$
+--- no_error_log
+[error]
