@@ -4,7 +4,7 @@
 # Client: Test::Nginx default (Perl IO::Socket, plain HTTP/1.1).
 # Scope: module load, plain-HTTP safety when JA4 variables are referenced,
 #        JA4H HTTP-layer fields (method, Cookie, Referer, Accept-Language),
-#        JA4H.png hashes (header order, cookie fields sorted).
+#        JA4H goldens from FoxIO rust/ja4/src/http.rs (comma-join, hash12 zeros).
 # Not covered here: TLS ClientHello / JA4 golden fingerprints (see test/*.py).
 #
 # Run (requires nginx built with this module + Test::Nginx):
@@ -117,6 +117,7 @@ GET /t
 
 
 === TEST 6: ja4h_cookie_and_referer
+# Cookie+Referer dropped from b (same hash as TEST 11). c/d as TEST 12.
 --- config
     location /t {
         default_type text/plain;
@@ -128,7 +129,7 @@ Referer: http://example.test/
 --- request
 GET /t
 --- response_body_like chomp
-^ja4h=ge11cr02
+^ja4h=ge11cr020000_d5c75abc5c2c_ca978112ca1b_c22fea5d7428$
 --- no_error_log
 [error]
 
@@ -207,9 +208,8 @@ GET /t
 
 
 === TEST 11: ja4h_spec_no_cookie
-# JA4H.png: b = truncated SHA-256 of header names in wire order (Host then
-# Connection). No delimiter specified; pieces are concatenated. Missing
-# cookies still produce c/d (empty SHA-256), not spec zeros.
+# FoxIO rust/ja4: b = hash12(join(',', header names)), Cookie/Referer dropped.
+# Empty cookies: hash12("") = 000000000000 (not sha256 of empty bytes).
 --- config
     location /t {
         default_type text/plain;
@@ -218,15 +218,14 @@ GET /t
 --- request
 GET /t
 --- response_body_like chomp
-^ja4h=ge11nn020000_7a4d84769e2f_e3b0c44298fc_e3b0c44298fc$
+^ja4h=ge11nn020000_d5c75abc5c2c_000000000000_000000000000$
 --- no_error_log
 [error]
 
 
 
 === TEST 12: ja4h_spec_cookie
-# Cookie is ignored in the a-section count, not in b (headers in the order
-# they appear). c = sha256 of cookie field name "a"; d = sha256 of "a=1".
+# Cookie is dropped from b (same as TEST 11). c = hash12("a"); d = hash12("a=1").
 --- config
     location /t {
         default_type text/plain;
@@ -237,15 +236,14 @@ Cookie: a=1
 --- request
 GET /t
 --- response_body_like chomp
-^ja4h=ge11cn020000_732b78a28558_ca978112ca1b_c22fea5d7428$
+^ja4h=ge11cn020000_d5c75abc5c2c_ca978112ca1b_c22fea5d7428$
 --- no_error_log
 [error]
 
 
 
 === TEST 13: ja4h_spec_cookie_sort
-# Cookie fields sorted: names a then z; pairs a=1 then z=9. Concatenated
-# (diagram does not specify commas).
+# Sorted cookie names/pairs comma-joined: hash12("a,z") / hash12("a=1,z=9").
 --- config
     location /t {
         default_type text/plain;
@@ -256,15 +254,14 @@ Cookie: z=9; a=1
 --- request
 GET /t
 --- response_body_like chomp
-^ja4h=ge11cn020000_732b78a28558_9c0ada37bf74_509a74b46377$
+^ja4h=ge11cn020000_d5c75abc5c2c_5580854b5248_1eae8af021d5$
 --- no_error_log
 [error]
 
 
 
-=== TEST 14: ja4h_spec_referer_in_hash_not_count
-# Referer is ignored in the a-section count (still 02) but is a header that
-# appears, so b is sha256("HostConnectionReferer"), not TEST 11's b.
+=== TEST 14: ja4h_spec_referer_dropped_from_b
+# Referer is ignored in the count (02) and dropped from b (same as TEST 11).
 --- config
     location /t {
         default_type text/plain;
@@ -275,7 +272,7 @@ Referer: http://example.test/
 --- request
 GET /t
 --- response_body_like chomp
-^ja4h=ge11nr020000_864f5fba6472_e3b0c44298fc_e3b0c44298fc$
+^ja4h=ge11nr020000_d5c75abc5c2c_000000000000_000000000000$
 --- no_error_log
 [error]
 
@@ -330,8 +327,8 @@ GET /t
 
 
 === TEST 18: ja4h_spec_two_cookie_headers
-# Two Cookie lines. Count ignores both (still 02). b includes both Cookie
-# names. c/d are sorted names/pairs from both lines (same as TEST 13).
+# Two Cookie lines. Count ignores both (still 02). b drops Cookie (same as
+# TEST 11). c/d match TEST 13 (comma-joined sorted names/pairs).
 --- config
     location /t {
         default_type text/plain;
@@ -343,7 +340,7 @@ Cookie: a=1
 --- request
 GET /t
 --- response_body_like chomp
-^ja4h=ge11cn020000_464c4be3d522_9c0ada37bf74_509a74b46377$
+^ja4h=ge11cn020000_d5c75abc5c2c_5580854b5248_1eae8af021d5$
 --- no_error_log
 [error]
 
@@ -361,7 +358,7 @@ Cookie: flag
 --- request
 GET /t
 --- response_body_like chomp
-^ja4h=ge11cn020000_732b78a28558_807d0fbcae7c_807d0fbcae7c$
+^ja4h=ge11cn020000_d5c75abc5c2c_807d0fbcae7c_807d0fbcae7c$
 --- no_error_log
 [error]
 
@@ -379,7 +376,7 @@ Accept-Language:
 --- request
 GET /t
 --- response_body_like chomp
-^ja4h=ge11nn030000_93b341afb8ea_e3b0c44298fc_e3b0c44298fc$
+^ja4h=ge11nn030000_6fe3288294a7_000000000000_000000000000$
 --- no_error_log
 [error]
 
@@ -397,7 +394,7 @@ Accept-Language: ;q=0.9
 --- request
 GET /t
 --- response_body_like chomp
-^ja4h=ge11nn030000_93b341afb8ea_e3b0c44298fc_e3b0c44298fc$
+^ja4h=ge11nn030000_6fe3288294a7_000000000000_000000000000$
 --- no_error_log
 [error]
 
@@ -415,7 +412,7 @@ Accept-Language: english
 --- request
 GET /t
 --- response_body_like chomp
-^ja4h=ge11nn03engl_93b341afb8ea_e3b0c44298fc_e3b0c44298fc$
+^ja4h=ge11nn03engl_6fe3288294a7_000000000000_000000000000$
 --- no_error_log
 [error]
 
@@ -424,7 +421,7 @@ GET /t
 === TEST 23: ja4h_spec_headers_second_part
 # nginx nalloc=20: Host, Connection, X-0 .. X-17 fill the first part;
 # X-18 is on part.next. Count must be 21, not first-part 20.
-# b still walks next (HostConnectionX-0..X-18).
+# b is hash12 of comma-joined names including X-18.
 --- config
     location /t {
         default_type text/plain;
@@ -453,6 +450,6 @@ X-18: 1
 --- request
 GET /t
 --- response_body_like chomp
-^ja4h=ge11nn210000_bfff74643b3e_e3b0c44298fc_e3b0c44298fc$
+^ja4h=ge11nn210000_e46fbdfb6ecf_000000000000_000000000000$
 --- no_error_log
 [error]
