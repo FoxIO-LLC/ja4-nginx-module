@@ -173,8 +173,8 @@ GET /t
 
 
 === TEST 9: ja4h_string_no_cookie
-# $http_ssl_ja4h_string is A-section, raw header names, raw cookie fields,
-# raw cookie values. No cookies => empty trailing field/value segments.
+# JA4H_r: a + unhashed b/c/d inputs. Cookie/Referer dropped from headers.
+# No cookies => empty cookie-name and pair segments.
 --- config
     location /t {
         default_type text/plain;
@@ -183,14 +183,15 @@ GET /t
 --- request
 GET /t
 --- response_body_like chomp
-^ja4h_string=ge11nn\d{2}0000_.+__$
+^ja4h_string=ge11nn020000_Host,Connection__$
 --- no_error_log
 [error]
 
 
 
 === TEST 10: ja4h_string_with_cookie
-# Cookie: a=1 => raw cookie fields "a", raw cookie values "1".
+# JA4H_r: Cookie dropped from the header list; last segments are name and
+# name=value (not value only).
 --- config
     location /t {
         default_type text/plain;
@@ -201,7 +202,7 @@ Cookie: a=1
 --- request
 GET /t
 --- response_body_like chomp
-^ja4h_string=ge11cn\d{2}0000_.+_a_1$
+^ja4h_string=ge11cn020000_Host,Connection_a_a=1$
 --- no_error_log
 [error]
 
