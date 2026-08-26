@@ -9,7 +9,7 @@
 
             JA4S String: 
 
-            JA4H: ge11nn14enus_33ac871f7c5e_e3b0c44298fc_e3b0c44298fc
+            JA4H: ge11nn14enus_4a2973d235de_000000000000_000000000000
 
             JA4H String: ge11nn14enus_Host,sec-ch-ua,sec-ch-ua-mobile,sec-ch-ua-platform,Upgrade-Insecure-Requests,User-Agent,Accept,Sec-Fetch-Site,Sec-Fetch-Mode,Sec-Fetch-User,Sec-Fetch-Dest,Accept-Encoding,Accept-Language,Priority__
 

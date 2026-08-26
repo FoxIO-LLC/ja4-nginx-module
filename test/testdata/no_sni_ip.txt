@@ -9,7 +9,7 @@
 
             JA4S String: 
 
-            JA4H: ge11nn030000_b51846f30ce9_e3b0c44298fc_e3b0c44298fc
+            JA4H: ge11nn030000_fe444ad14866_000000000000_000000000000
 
             JA4H String: ge11nn030000_Host,User-Agent,Accept__
 
