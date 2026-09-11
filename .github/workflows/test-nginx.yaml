@@ -4,12 +4,30 @@ on: pull_request
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: Test::Nginx (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x86_64-asan-bounds
+            runner: ubuntu-24.04
+            cc: gcc
+            cc_sanitize: "-fsanitize=address,bounds -fno-sanitize-recover=bounds"
+            ld_sanitize: "-fsanitize=address,bounds"
+          - name: arm64-hwasan
+            runner: ubuntu-24.04-arm
+            cc: clang
+            cc_sanitize: "-fsanitize=hwaddress -fPIE"
+            ld_sanitize: "-fsanitize=hwaddress -pie -fuse-ld=lld"
 
     env:
-      NGINX_VERSION: "1.30.4"
+      NGINX_VERSION: "1.31.4"
       BUILD_DIR: /tmp/build
+      CC: ${{ matrix.cc }}
+      ASAN_OPTIONS: detect_leaks=0
+      HWASAN_OPTIONS: detect_leaks=0
 
     steps:
       - name: Checkout
@@ -26,6 +44,7 @@ jobs:
             perl \
             cpanminus \
             wget \
+            git \
             patch
           sudo cpanm --notest Test::Nginx
 
@@ -37,23 +56,49 @@ jobs:
           wget -q "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz"
           tar -zxf "nginx-${NGINX_VERSION}.tar.gz"
 
-      - name: Apply nginx.patch
+      - name: Clone no-pool-nginx
         run: |
           set -euo pipefail
-          patch -p1 -d "${BUILD_DIR}/nginx-${NGINX_VERSION}" \
+          git clone --depth=1 https://github.com/openresty/no-pool-nginx.git \
+            "${BUILD_DIR}/no-pool-nginx"
+
+      - name: Apply patches
+        run: |
+          set -euo pipefail
+          nginx_src="${BUILD_DIR}/nginx-${NGINX_VERSION}"
+          no_pool="${BUILD_DIR}/no-pool-nginx/nginx-${NGINX_VERSION}-no_pool.patch"
+          if [ ! -f "${no_pool}" ]; then
+            echo "::error::no-pool patch not found: ${no_pool}"
+            exit 1
+          fi
+          patch -p1 -d "${nginx_src}" < "${no_pool}"
+          patch -p1 -d "${nginx_src}" \
             < "${GITHUB_WORKSPACE}/patches/nginx.patch"
 
-      - name: Build nginx with JA4 module
+      - name: Build nginx with JA4 module (${{ matrix.name }})
         run: |
           set -euo pipefail
           cd "${BUILD_DIR}/nginx-${NGINX_VERSION}"
+          # Sanitizer flags go on make, not configure: nginx sizeof probes
+          # execute autotest binaries and SIGILL under HWASan.
           ./configure \
+            --with-cc="${CC}" \
             --with-debug \
+            --with-cc-opt="-O1 -g -fno-omit-frame-pointer" \
             --add-module="${GITHUB_WORKSPACE}" \
-            --with-http_ssl_module
+            --with-http_ssl_module \
+            || { echo "::error::nginx configure failed"; cat objs/autoconf.err; exit 1; }
+          sed -i \
+            -e "s|^CFLAGS *=|CFLAGS = ${{ matrix.cc_sanitize }} |" \
+            -e "s|^LINK *=.*|LINK = ${CC} ${{ matrix.ld_sanitize }}|" \
+            objs/Makefile
+          grep -E '^(CFLAGS|LINK)[[:space:]]*=' objs/Makefile
+          grep -q -- '-fsanitize=' <<<"$(grep '^CFLAGS[[:space:]]*=' objs/Makefile)" \
+            || { echo "::error::CFLAGS missing sanitizer flags"; exit 1; }
           make -j"$(nproc)"
+          ./objs/nginx -V
 
       - name: Run Test::Nginx
         run: |
-          export TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx"
+          export PATH="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs:${PATH}"
           prove -v test/*.t

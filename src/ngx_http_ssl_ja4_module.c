@@ -1132,12 +1132,12 @@ ngx_ssl_ja4h_is_cookie_or_referer(ngx_table_elt_t *h)
  * encoded so they are not confused with hex nibbles (FoxIO-LLC/ja4#230).
  * Right-pad with '0' to 4 chars. */
 static void
-ngx_ssl_ja4h_decode_http_lang(ngx_str_t *val, char *out)
+ngx_ssl_ja4h_decode_http_lang(ngx_str_t *val, ngx_ssl_ja4h_t *ja4h)
 {
     static const u_char hex[] = "0123456789abcdef";
     size_t i, n;
 
-    ngx_memcpy(out, "0000", 5);
+    ngx_memcpy(ja4h->primary_accept_language, "0000", 5);
 
     for (i = 0, n = 0; n < 4 && i < val->len; i++) {
         u_char c = val->data[i];
@@ -1153,23 +1153,23 @@ ngx_ssl_ja4h_decode_http_lang(ngx_str_t *val, char *out)
         }
 
         if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
-            out[n++] = (char) ngx_tolower(c);
+            ja4h->primary_accept_language[n++] = (char) ngx_tolower(c);
             continue;
         }
 
         /* Non-alpha, including digits: two lowercase hex digits. */
         if (n < 4) {
-            out[n++] = (char) hex[(c >> 4) & 0x0F];
+            ja4h->primary_accept_language[n++] = (char) hex[(c >> 4) & 0x0F];
         }
         if (n < 4) {
-            out[n++] = (char) hex[c & 0x0F];
+            ja4h->primary_accept_language[n++] = (char) hex[c & 0x0F];
         }
     }
 }
 
 /* FoxIO hash12: 12 hex chars of SHA-256; empty input is 000000000000, not SHA256(""). */
 static ngx_int_t
-ngx_ssl_ja4h_hash12(ngx_str_t *in, char *out)
+ngx_ssl_ja4h_hash12(ngx_str_t *in, char out[13])
 {
     SHA256_CTX sha256;
     u_char hash[SHA256_DIGEST_LENGTH];
@@ -1310,13 +1310,13 @@ static const struct {
 };
 
 static void
-ngx_ssl_ja4h_method_code(ngx_str_t *method_name, char *out)
+ngx_ssl_ja4h_method_code(ngx_str_t *method_name, ngx_ssl_ja4h_t *ja4h)
 {
     size_t  i;
 
-    out[0] = '0';
-    out[1] = '0';
-    out[2] = '\0';
+    ja4h->http_method[0] = '0';
+    ja4h->http_method[1] = '0';
+    ja4h->http_method[2] = '\0';
 
     for (i = 0; i < sizeof(ngx_ssl_ja4h_method_map)
                     / sizeof(ngx_ssl_ja4h_method_map[0]); i++)
@@ -1326,8 +1326,8 @@ ngx_ssl_ja4h_method_code(ngx_str_t *method_name, char *out)
                                ngx_ssl_ja4h_method_map[i].method.data,
                                method_name->len) == 0)
         {
-            out[0] = ngx_ssl_ja4h_method_map[i].code[0];
-            out[1] = ngx_ssl_ja4h_method_map[i].code[1];
+            ja4h->http_method[0] = ngx_ssl_ja4h_method_map[i].code[0];
+            ja4h->http_method[1] = ngx_ssl_ja4h_method_map[i].code[1];
             return;
         }
     }
@@ -1344,7 +1344,7 @@ ngx_ssl_ja4h(ngx_http_request_t *r, ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h)
     ngx_memzero(ja4h, sizeof(ngx_ssl_ja4h_t));
 
     // JA4H_a
-    ngx_ssl_ja4h_method_code(&r->method_name, ja4h->http_method);
+    ngx_ssl_ja4h_method_code(&r->method_name, ja4h);
 
     ja4h->http_version[0] = (char) ('0' + r->http_version / 1000);
     ja4h->http_version[1] = (char) ('0' + r->http_version % 1000);
@@ -1376,8 +1376,7 @@ ngx_ssl_ja4h(ngx_http_request_t *r, ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h)
             && (ngx_strncasecmp(header_item[i].key.data, (u_char *) "Accept-Language",
                                 sizeof("Accept-Language") - 1) == 0))
         {
-            ngx_ssl_ja4h_decode_http_lang(&header_item[i].value,
-                                          ja4h->primary_accept_language);
+            ngx_ssl_ja4h_decode_http_lang(&header_item[i].value, ja4h);
             lang_set = 1;
         }
 
