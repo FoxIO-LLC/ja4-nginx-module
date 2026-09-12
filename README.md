@@ -128,6 +128,25 @@ patch -p1 < /path/to/ja4-nginx-module/patches/nginx-tcp-save-syn.patch
 make && make install
 ```
 
+### JA4T (TCP SYN fingerprint)
+
+JA4T is computed from the client TCP SYN. Enable SYN capture **per server** (default off — kernel SYN copies cost memory):
+
+```nginx
+server {
+    listen 8080;
+    tcp_save_syn on;
+
+    access_log logs/access.log '$remote_addr ja4t=$http_ssl_ja4t';
+}
+```
+
+`$http_ssl_ja4t` looks like `64240_2-4-8-1-3_1460_7` (window, option kinds, MSS, window scale).
+
+`TCP_SAVE_SYN` is a listen-socket option. `tcp_save_syn on` (http, server, or stream) turns it on for that server's listen fds. If two `server` blocks share the same `listen` address, enabling it on either one caches SYNs for every connection on that fd. Bind a dedicated address/port if you need to isolate the cost. The blob is stored on `ngx_connection_t.saved_syn` (`ngx_str_t`) for any module to read; JA4T is only one consumer.
+
+Empty `$http_ssl_ja4t` is expected when `tcp_save_syn` is off, on SYN cookies, unix/QUIC. Note that behind a TCP proxy, it will fingerprint the proxy rather than the real client.
+
 The root `Dockerfile` is a full reference build. See also Usage and Testing above for Docker and `pytest`.
 
 ## Creating a Release
