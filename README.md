@@ -68,7 +68,22 @@ TEST_NGINX_VERBOSE=1 prove -v test/plain-http-variables.t
 
 Current files:
 
-- `test/plain-http-variables.t` — module loads (`$http_ssl_ja4h`), SSL JA4 vars empty and safe on plain HTTP
+- `test/plain-http-variables.t` — module loads (`$http_ssl_ja4h`), SSL JA4 vars empty and safe on plain HTTP (including `$http_ssl_ja4t` with `tcp_save_syn` off)
+- `test/ja4t-variables.t` — JA4T goldens via [curlu](https://github.com/lynch1981/curlu) `--ja4t` (HTTP, IPv4, root)
+
+JA4T goldens need curlu’s `curl` wrapper on `PATH` and root (`ip` + `nft`).
+
+```bash
+git clone https://github.com/lynch1981/curlu.git
+(cd curlu && ./build.sh)
+sudo -E env \
+    PATH="/path/to/curlu:$PATH" \
+    PERL5LIB="$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}" \
+    TEST_NGINX_BINARY=/path/to/nginx \
+    prove -v test/ja4t-variables.t
+```
+
+Without curlu or root, `ja4t-variables.t` is skipped.
 
 Runtime tree `test/servroot/` is created by Test::Nginx and is gitignored.
 
