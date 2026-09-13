@@ -1,0 +1,4 @@
+/* Cache-stage placeholder: the dummy module does not call JA4T functions. */
+#include <ngx_config.h>
+#include <ngx_core.h>
+#include <ngx_http.h>
