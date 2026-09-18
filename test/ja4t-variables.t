@@ -182,7 +182,7 @@ GET /t
 
 
 
-=== TEST 8: end-of-options stops parsing
+=== TEST 8: Mac/iPhone trailing option zeros
 --- http_config
     tcp_save_syn on;
 --- config
@@ -191,13 +191,13 @@ GET /t
         return 200 "$http_ssl_ja4t\n";
     }
 --- http2
---- curl_options: --ja4t=8192_2-0-1-1-1_1460_00
+--- curl_options: --ja4t=65535_2-1-3-1-1-8-4-0-0_1460_6
 --- timeout: 10
 --- request
 GET /t
 --- error_code: 200
 --- response_body
-8192_2-0_1460_00
+65535_2-1-3-1-1-8-4-0-0_1460_6
 --- no_error_log
 [error]
 
@@ -240,5 +240,68 @@ GET /t
 --- error_code: 200
 --- response_body
 64240_2-4-8-1-3_1460_14
+--- no_error_log
+[error]
+
+
+
+=== TEST 11: kinds after EOL stay in the fingerprint
+--- http_config
+    tcp_save_syn on;
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "$http_ssl_ja4t\n";
+    }
+--- http2
+--- curl_options: --ja4t=8192_2-0-1-1-1_1460_00
+--- timeout: 10
+--- request
+GET /t
+--- error_code: 200
+--- response_body
+8192_2-0-1-1-1_1460_00
+--- no_error_log
+[error]
+
+
+
+=== TEST 12: window scale after EOL is ignored
+--- http_config
+    tcp_save_syn on;
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "$http_ssl_ja4t\n";
+    }
+--- http2
+--- curl_options: --ja4t=8192_2-0-3_1460_7
+--- timeout: 10
+--- request
+GET /t
+--- error_code: 200
+--- response_body
+8192_2-0-3_1460_00
+--- no_error_log
+[error]
+
+
+
+=== TEST 13: MSS after EOL is ignored
+--- http_config
+    tcp_save_syn on;
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "$http_ssl_ja4t\n";
+    }
+--- http2
+--- curl_options: --ja4t=8192_3-0-2_1460_7
+--- timeout: 10
+--- request
+GET /t
+--- error_code: 200
+--- response_body
+8192_3-0-2_00_7
 --- no_error_log
 [error]

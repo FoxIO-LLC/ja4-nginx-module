@@ -6,7 +6,7 @@ ngx_http_ja4t_parse_syn(const u_char *buf, size_t len, ngx_http_ja4t_t *ja4t)
 {
     size_t        off, tcp_off, tcp_hlen, remaining, adv;
     const u_char *tcp, *opt, *opt_end;
-    u_char        kind, olen, ver, nxt;
+    u_char        kind, olen, ver, nxt, seen_eol;
 
     if (buf == NULL || len < 20) {
         return NGX_DECLINED;
@@ -88,6 +88,7 @@ ngx_http_ja4t_parse_syn(const u_char *buf, size_t len, ngx_http_ja4t_t *ja4t)
 
     opt = tcp + 20;
     opt_end = tcp + tcp_hlen;
+    seen_eol = 0;
 
     while (opt < opt_end) {
         remaining = (size_t) (opt_end - opt);
@@ -100,7 +101,10 @@ ngx_http_ja4t_parse_syn(const u_char *buf, size_t len, ngx_http_ja4t_t *ja4t)
         ja4t->kinds[ja4t->nkinds++] = kind;
 
         if (kind == 0) {
-            break;
+            seen_eol = 1;
+
+            opt++;
+            continue;
         }
 
         if (kind == 1) {
@@ -117,12 +121,13 @@ ngx_http_ja4t_parse_syn(const u_char *buf, size_t len, ngx_http_ja4t_t *ja4t)
             return NGX_DECLINED;
         }
 
-        if (kind == 2 && olen == 4) {
+        /* kinds after EOL stay in the list; MSS / window scale do not */
+        if (!seen_eol && kind == 2 && olen == 4) {
             ja4t->mss = ((unsigned int) opt[2] << 8) | opt[3];
             ja4t->mss_present = 1;
         }
 
-        if (kind == 3 && olen == 3) {
+        if (!seen_eol && kind == 3 && olen == 3) {
             ja4t->window_scale = opt[2];
             ja4t->wscale_present = 1;
         }
