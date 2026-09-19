@@ -415,18 +415,12 @@ static ngx_int_t ngx_http_ssl_ja4h(ngx_http_request_t *r, ngx_http_variable_valu
 static ngx_int_t ngx_http_ssl_ja4h_string(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
 
 // JA4T
-int ngx_ssl_ja4t(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4t_t *ja4t);
-void ngx_ssl_ja4t_fp(ngx_pool_t *pool, ngx_ssl_ja4t_t *ja4t, ngx_str_t *out);
 static ngx_int_t ngx_http_ssl_ja4t(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
-// JA4T STRING
-void ngx_ssl_ja4t_fp_string(ngx_pool_t *pool, ngx_ssl_ja4t_t *ja4t, ngx_str_t *out);
-static ngx_int_t ngx_http_ssl_ja4t_string(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
 
 // JA4TS
 int ngx_ssl_ja4ts(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4ts_t *ja4ts);
 void ngx_ssl_ja4ts_fp(ngx_pool_t *pool, ngx_ssl_ja4ts_t *ja4ts, ngx_str_t *out);
 static ngx_int_t ngx_http_ssl_ja4ts(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
-// JA4TS STRING
 void ngx_ssl_ja4ts_fp_string(ngx_pool_t *pool, ngx_ssl_ja4ts_t *ja4ts, ngx_str_t *out);
 static ngx_int_t ngx_http_ssl_ja4ts_string(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
 

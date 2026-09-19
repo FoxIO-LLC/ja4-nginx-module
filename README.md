@@ -68,7 +68,22 @@ TEST_NGINX_VERBOSE=1 prove -v test/plain-http-variables.t
 
 Current files:
 
-- `test/plain-http-variables.t` — module loads (`$http_ssl_ja4h`), SSL JA4 vars empty and safe on plain HTTP
+- `test/plain-http-variables.t` — module loads (`$http_ssl_ja4h`), SSL JA4 vars empty and safe on plain HTTP (including `$http_ssl_ja4t` with `tcp_save_syn` off)
+- `test/ja4t-variables.t` — JA4T goldens via [curlu](https://github.com/lynch1981/curlu) `--ja4t` (HTTP, IPv4, root)
+
+JA4T goldens need curlu’s `curl` wrapper on `PATH` and root (`ip` + `nft`).
+
+```bash
+git clone https://github.com/lynch1981/curlu.git
+(cd curlu && ./build.sh)
+sudo -E env \
+    PATH="/path/to/curlu:$PATH" \
+    PERL5LIB="$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}" \
+    TEST_NGINX_BINARY=/path/to/nginx \
+    prove -v test/ja4t-variables.t
+```
+
+Without curlu or root, `ja4t-variables.t` is skipped.
 
 Runtime tree `test/servroot/` is created by Test::Nginx and is gitignored.
 
@@ -103,14 +118,34 @@ To develop and debug the Dockerfile container, I find it useful to run docker wi
 
 ## Developer Guide
 
-Build against official nginx: apply `patches/nginx.patch` to the nginx source tree, then configure with `--add-module=/path/to/ja4-nginx-module`.
+Build against official nginx: apply `patches/nginx.patch` (TLS ClientHello capture) **and** `patches/nginx-tcp-save-syn.patch` (opt-in `TCP_SAVE_SYN` / `c->saved_syn`) to the nginx source tree, then configure with `--add-module=/path/to/ja4-nginx-module`.
 
 ```bash
 cd nginx-${NGINX_VERSION}
 patch -p1 < /path/to/ja4-nginx-module/patches/nginx.patch
+patch -p1 < /path/to/ja4-nginx-module/patches/nginx-tcp-save-syn.patch
 ./configure --add-module=/path/to/ja4-nginx-module --with-http_ssl_module ...
 make && make install
 ```
+
+### JA4T (TCP SYN fingerprint)
+
+JA4T is computed from the client TCP SYN. Enable SYN capture **per server** (default off — kernel SYN copies cost memory):
+
+```nginx
+server {
+    listen 8080;
+    tcp_save_syn on;
+
+    access_log logs/access.log '$remote_addr ja4t=$http_ssl_ja4t';
+}
+```
+
+`$http_ssl_ja4t` looks like `64240_2-4-8-1-3_1460_7` (window, option kinds, MSS, window scale).
+
+`TCP_SAVE_SYN` is a listen-socket option. `tcp_save_syn on` (http, server, or stream) turns it on for that server's listen fds. If two `server` blocks share the same `listen` address, enabling it on either one caches SYNs for every connection on that fd. Bind a dedicated address/port if you need to isolate the cost. The blob is stored on `ngx_connection_t.saved_syn` (`ngx_str_t`) for any module to read; JA4T is only one consumer.
+
+Empty `$http_ssl_ja4t` is expected when `tcp_save_syn` is off, on SYN cookies, unix/QUIC. Note that behind a TCP proxy, it will fingerprint the proxy rather than the real client.
 
 The root `Dockerfile` is a full reference build. See also Usage and Testing above for Docker and `pytest`.
 

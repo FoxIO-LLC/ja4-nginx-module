@@ -37,8 +37,12 @@ RUN wget https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_
 
 COPY config /tmp/ja4-nginx-module/config
 COPY src/ngx_http_ssl_ja4_module.c.dummy /tmp/ja4-nginx-module/src/ngx_http_ssl_ja4_module.c
+COPY src/ngx_http_ja4t.c.dummy /tmp/ja4-nginx-module/src/ngx_http_ja4t.c
+COPY patches/nginx-tcp-save-syn.patch /tmp/ja4-nginx-module/patches/nginx-tcp-save-syn.patch
 
 WORKDIR /tmp/nginx-${NGINX_VERSION}
+# Detect SYN capture support for the real JA4T implementation in the final stage.
+RUN patch -p1 < /tmp/ja4-nginx-module/patches/nginx-tcp-save-syn.patch
 RUN ./configure \
       --with-openssl=/tmp/openssl-${OPENSSL_VERSION} \
       --with-debug --with-compat \

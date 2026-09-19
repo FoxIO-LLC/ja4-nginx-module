@@ -24,6 +24,7 @@ jobs:
 
     env:
       NGINX_VERSION: "1.31.4"
+      CURLU_VERSION: "1.1.1"
       BUILD_DIR: /tmp/build
       CC: ${{ matrix.cc }}
       ASAN_OPTIONS: detect_leaks=0
@@ -45,8 +46,26 @@ jobs:
             cpanminus \
             wget \
             git \
-            patch
+            patch \
+            iproute2 \
+            nftables
           sudo cpanm --notest Test::Nginx
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.0'
+          cache: false
+
+      - name: Build curlu
+        run: |
+          set -euo pipefail
+          mkdir -p "${BUILD_DIR}"
+          cd "${BUILD_DIR}"
+          wget -q "https://github.com/lynch1981/curlu/archive/refs/tags/v${CURLU_VERSION}.tar.gz"
+          tar -zxf "v${CURLU_VERSION}.tar.gz"
+          cd "curlu-${CURLU_VERSION}"
+          bash build.sh
 
       - name: Download nginx
         run: |
@@ -74,6 +93,8 @@ jobs:
           patch -p1 -d "${nginx_src}" < "${no_pool}"
           patch -p1 -d "${nginx_src}" \
             < "${GITHUB_WORKSPACE}/patches/nginx.patch"
+          patch -p1 -d "${nginx_src}" \
+            < "${GITHUB_WORKSPACE}/patches/nginx-tcp-save-syn.patch"
 
       - name: Build nginx with JA4 module (${{ matrix.name }})
         run: |
@@ -87,6 +108,7 @@ jobs:
             --with-cc-opt="-O1 -g -fno-omit-frame-pointer" \
             --add-module="${GITHUB_WORKSPACE}" \
             --with-http_ssl_module \
+            --with-http_v2_module \
             || { echo "::error::nginx configure failed"; cat objs/autoconf.err; exit 1; }
           sed -i \
             -e "s|^CFLAGS *=|CFLAGS = ${{ matrix.cc_sanitize }} |" \
@@ -98,7 +120,20 @@ jobs:
           make -j"$(nproc)"
           ./objs/nginx -V
 
-      - name: Run Test::Nginx
+      - name: Run Test::Nginx (unprivileged)
         run: |
-          export PATH="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs:${PATH}"
-          prove -v test/*.t
+          set -euo pipefail
+          export TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx"
+          prove -v $(ls test/*.t | grep -v 'ja4t-variables\.t')
+
+      # Run last: curlu crafts SYN packets using root-only network operations.
+      - name: Run JA4T tests (root)
+        run: |
+          set -euo pipefail
+          export PATH="${BUILD_DIR}/curlu-${CURLU_VERSION}:${PATH}"
+          sudo -E env \
+            PATH="${PATH}" \
+            TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx" \
+            ASAN_OPTIONS="${ASAN_OPTIONS}" \
+            HWASAN_OPTIONS="${HWASAN_OPTIONS}" \
+            prove -v test/ja4t-variables.t
