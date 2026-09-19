@@ -123,6 +123,7 @@ jobs:
       - name: Run Test::Nginx (unprivileged)
         run: |
           set -euo pipefail
+          export PATH="${BUILD_DIR}/curlu-${CURLU_VERSION}:${PATH}"
           export TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx"
           prove -v $(ls test/*.t | grep -v 'ja4t-variables\.t')
 
