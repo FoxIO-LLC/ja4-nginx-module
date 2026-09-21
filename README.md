@@ -69,6 +69,7 @@ http {
 
     server {
         listen 443 ssl;
+        tcp_save_syn on; # Requires the optional SYN capture patch.
         ssl_certificate /path/to/server.crt;
         ssl_certificate_key /path/to/server.key;
         access_log logs/access.log fingerprints;
@@ -78,7 +79,7 @@ http {
 
 ### JA4T
 
-JA4T requires the optional SYN capture patch and a Linux kernel with `TCP_SAVE_SYN` support. Enable capture in the relevant `server` block (or at `http` scope):
+JA4T requires the optional SYN capture patch and a Linux kernel with `TCP_SAVE_SYN` support. Enable capture in the relevant `server` block, or at `http` or `stream` scope.
 
 ```nginx
 tcp_save_syn on;
@@ -98,17 +99,13 @@ Run both suites from the repository root. The [CI workflows](.github/workflows) 
 
 The Perl suite (`test/*.t`) checks module loading, variable behavior on plain HTTP, JA4H request fingerprints, TLS ClientHello cases and JA4T SYN fingerprints.
 
-Use nginx built with both patches and HTTP/2 support. Install [Test::Nginx](https://github.com/openresty/test-nginx) with `cpanm`, and build [curlu](https://github.com/lynch1981/curlu) using the version pinned in [CI](.github/workflows/test-nginx.yaml). Its `curl` wrapper must be on `PATH` for the TLS and JA4T cases.
+Use nginx built with both patches and HTTP/2 support. Install [Test::Nginx](https://github.com/openresty/test-nginx) with `cpanm`, and build [curlu](https://github.com/lynch1981/curlu) with Go 1.24.0 using the curlu version pinned in [CI](.github/workflows/test-nginx.yaml). Its `curl` wrapper must be on `PATH` for the TLS and JA4T cases.
 
 ```bash
 cpanm --local-lib="$HOME/perl5" Test::Nginx
 export PERL5LIB="$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}"
 export TEST_NGINX_BINARY=/path/to/nginx/objs/nginx
 export PATH="/path/to/curlu:$PATH"
-mkdir -p test/certs
-openssl req -x509 -nodes -newkey rsa:2048 \
-    -keyout test/certs/server.key -out test/certs/server.crt \
-    -days 30 -subj "/CN=localhost"
 prove -v test/*.t
 ```
 
