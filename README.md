@@ -25,7 +25,7 @@ From the repository root, generate the local test certificate and key (neither i
 mkdir -p nginx_utils/logs
 openssl req -x509 -nodes -newkey rsa:2048 \
     -keyout nginx_utils/server.key -out nginx_utils/server.crt \
-    -days 1 -subj "/CN=localhost"
+    -days 30 -subj "/CN=localhost"
 docker compose up --build
 ```
 
@@ -108,7 +108,7 @@ export PATH="/path/to/curlu:$PATH"
 mkdir -p test/certs
 openssl req -x509 -nodes -newkey rsa:2048 \
     -keyout test/certs/server.key -out test/certs/server.crt \
-    -days 1 -subj "/CN=localhost"
+    -days 30 -subj "/CN=localhost"
 prove -v test/*.t
 ```
 
