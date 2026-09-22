@@ -48,11 +48,10 @@ GET /t
 === TEST 2: plain_http_no_crash (SSL JA4 vars on plain HTTP)
 # On non-TLS connections ngx_ssl_ja4() declines; handlers must not crash
 # the worker. Current behavior substitutes an empty value (not 500).
-# JA4X is registered as $https_ssl_ja4x (not $http_ssl_ja4x).
 --- config
     location /t {
         default_type text/plain;
-        return 200 "ja4=$http_ssl_ja4 ja4_string=$http_ssl_ja4_string ja4one=$http_ssl_ja4one ja4s=$http_ssl_ja4s ja4s_string=$http_ssl_ja4s_string ja4l=$http_ssl_ja4l ja4t=$http_ssl_ja4t ja4t_string=$http_ssl_ja4t_string ja4ts=$http_ssl_ja4ts ja4ts_string=$http_ssl_ja4ts_string ja4x=$https_ssl_ja4x ja4x_string=$https_ssl_ja4x_string\n";
+        return 200 "ja4=$http_ssl_ja4 ja4_string=$http_ssl_ja4_string ja4one=$http_ssl_ja4one ja4s=$http_ssl_ja4s ja4s_string=$http_ssl_ja4s_string ja4l=$http_ssl_ja4l ja4t=$http_ssl_ja4t ja4t_string=$http_ssl_ja4t_string ja4ts=$http_ssl_ja4ts ja4ts_string=$http_ssl_ja4ts_string ja4x=$http_ssl_ja4x ja4x_string=$http_ssl_ja4x_string\n";
     }
 --- request
 GET /t

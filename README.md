@@ -1,228 +1,138 @@
-# NOTICE
+# JA4+ Nginx Module
 
-Development for JA4 on Nginx has been on pause due to other priorities taking development resources. This version of JA4 has known issues and bugs and may not produce correct JA4 values. Use at your own risk. We will continue development here as soon as resources become available. If you have questions, feel free to reach out to us at info@foxio.io.
+An nginx module exposing JA4+ fingerprints as nginx variables for logging and request handling.
 
-# JA4 on Nginx
+The module requires rebuilding nginx with [patches/nginx.patch](patches/nginx.patch), which captures TLS ClientHello information. JA4T additionally requires the [SYN capture patch](patches/nginx-tcp-save-syn.patch).
 
-This repository contains an nginx module that generates fingerprints from the JA4 suite. Additionally, a small patch to the nginx core is provided and necessary to for the module to function.
+## Supported fingerprints
 
-## Usage
+| Fingerprint | Nginx variables | Output |
+| --- | --- | --- |
+| JA4 | `$http_ssl_ja4`, `$http_ssl_ja4_string` | TLS client fingerprint; `_string` exposes the unhashed components. |
+| JA4one | `$http_ssl_ja4one` | TLS client fingerprint variant that excludes dynamic extensions from its extension count and hash. |
+| JA4H | `$http_ssl_ja4h`, `$http_ssl_ja4h_string` | HTTP request fingerprint; `_string` exposes header names and cookie data before hashing. |
+| JA4T | `$http_ssl_ja4t`, `$http_ssl_ja4t_string` | TCP SYN fingerprint; both variables return the same value. Requires [SYN capture](#ja4t). |
 
-A multi-stage `Dockerfile` is included in the project root. You can run the build directly from the root using:
+JA4 and JA4one require TLS and are empty on plain HTTP. JA4H works with both HTTP and HTTPS; JA4T is independent of TLS.
+
+## Quick start
+
+The root [Dockerfile](Dockerfile) and [Compose configuration](docker-compose.yaml) provide a development/reference environment. Make sure Docker Compose and OpenSSL are installed, and ports 80 and 443 are available.
+
+From the repository root, generate the local test certificate and key (neither is committed), then start nginx:
 
 ```bash
-docker-compose up --build
+mkdir -p nginx_utils/logs
+openssl req -x509 -nodes -newkey rsa:2048 \
+    -keyout nginx_utils/server.key -out nginx_utils/server.crt \
+    -days 30 -subj "/CN=localhost"
+docker compose up --build
 ```
 
-You can also build from source with:
+In another terminal, request the fingerprint response:
 
-1. `docker build -t ja4-nginx:source .`
-2. `docker run -p 80:80 -p 443:443 ja4-nginx:source`
+```bash
+curl -k https://localhost/
+```
+
+`-k` accepts the self-signed test certificate. The response uses [nginx_utils/nginx.conf](nginx_utils/nginx.conf); JA4T is empty until SYN capture is enabled. Stop the environment with `docker compose down`.
+
+## Building with nginx
+
+Install a C compiler, `make`, `patch`, and the OpenSSL, PCRE and zlib development libraries, then unpack the nginx source. See the [Dockerfile](Dockerfile) for a complete reference build and dependency versions.
+
+Starting from this repository's root, apply the patches to the nginx source tree before configuring:
+
+```bash
+ja4_module_dir="$(pwd)"
+cd /path/to/nginx-source
+patch -p1 < "$ja4_module_dir/patches/nginx.patch"
+# Optional: include this patch if you need JA4T.
+patch -p1 < "$ja4_module_dir/patches/nginx-tcp-save-syn.patch"
+./configure --add-module="$ja4_module_dir" \
+    --with-http_ssl_module --with-http_v2_module
+make
+make install
+```
+
+Add your usual nginx configure options, such as `--prefix`, as needed. Without the SYN capture patch, the module still builds, but JA4T returns no value and the `tcp_save_syn` directive is unavailable.
+
+## Configuration
+
+Reference the variables in your nginx configuration, for example to log fingerprints. Define the log format inside `http` and select it in your server:
+
+```nginx
+http {
+    log_format fingerprints '$remote_addr "$request" '
+                            'ja4=$http_ssl_ja4 ja4one=$http_ssl_ja4one '
+                            'ja4h=$http_ssl_ja4h ja4t=$http_ssl_ja4t';
+
+    server {
+        listen 443 ssl;
+        tcp_save_syn on; # Requires the optional SYN capture patch.
+        ssl_certificate /path/to/server.crt;
+        ssl_certificate_key /path/to/server.key;
+        access_log logs/access.log fingerprints;
+    }
+}
+```
+
+### JA4T
+
+JA4T requires the optional SYN capture patch and a Linux kernel with `TCP_SAVE_SYN` support. Enable capture in the relevant `server` block, or at `http` or `stream` scope.
+
+```nginx
+tcp_save_syn on;
+```
+
+Capture defaults to off because saved SYN packets cost memory. A fingerprint such as `64240_2-4-8-1-3_1460_7` contains the TCP window size, option kinds, MSS and window scale.
+
+`TCP_SAVE_SYN` applies to the listening socket. If server blocks share a listen address, enabling capture in either block saves SYNs for every connection on that socket. Use a dedicated address/port to isolate the cost.
+
+JA4T is empty when nginx is built without `NGX_HAVE_TCP_SAVE_SYN`, capture is off, or no SYN is available (for example with SYN cookies, Unix sockets or QUIC). Behind a TCP proxy, it fingerprints the proxy's connection to nginx.
 
 ## Testing
 
-There are two complementary suites:
+Run both suites from the repository root. The [CI workflows](.github/workflows) show the build and dependency setup.
 
-| Suite | Path | Framework | What it covers |
-|-------|------|-----------|----------------|
-| Test::Nginx | `test/*.t` | [Test::Nginx](https://github.com/openresty/test-nginx) + `prove` | Module load, config/variables, plain-HTTP safety, JA4H (planned) |
-| Integration / TLS | `test/*.py` | `pytest` + Docker | JA4 fingerprint goldens, ClientHello edge cases (curl, uTLS, curl_cffi) |
+### Test::Nginx
 
-### Test::Nginx tests (`test/*.t`)
+The Perl suite (`test/*.t`) checks module loading, variable behavior on plain HTTP, JA4H request fingerprints, TLS ClientHello cases and JA4T SYN fingerprints.
 
-Test::Nginx cases live under `test/*.t`. Each case embeds a small nginx config, starts nginx, issues a request with the default Test::Nginx client (Perl `IO::Socket`, plain HTTP/1.1), and asserts on the response.
-
-**Requirements**
-
-- nginx built with this module (and the required core patch)
-- Perl modules: `Test::Nginx` (and dependencies)
+Use nginx built with both patches and HTTP/2 support. Install [Test::Nginx](https://github.com/openresty/test-nginx) with `cpanm`, and build [curlu](https://github.com/lynch1981/curlu) with Go 1.24.0 using the curlu version pinned in [CI](.github/workflows/test-nginx.yaml). Its `curl` wrapper must be on `PATH` for the TLS and JA4T cases.
 
 ```bash
-# example: local install of Test::Nginx
-cpanm --local-lib=~/perl5 Test::Nginx
-export PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}
-```
-
-**Run**
-
-```bash
-export TEST_NGINX_BINARY=/path/to/nginx   # binary built with this module
+cpanm --local-lib="$HOME/perl5" Test::Nginx
+export PERL5LIB="$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}"
+export TEST_NGINX_BINARY=/path/to/nginx/objs/nginx
+export PATH="/path/to/curlu:$PATH"
 prove -v test/*.t
-# or a single file:
-prove -v test/plain-http-variables.t
 ```
 
-`TEST_NGINX_SERVROOT` is optional. Each `.t` file defaults it to `test/servroot` so Test::Nginx does not write `t/servroot`. Set the variable only if you need a different path.
-
-**Dump the HTTP response on success**
+JA4T tests need Linux, root, `ip` and `nft`; they are skipped without root or curlu. Run them with:
 
 ```bash
-TEST_NGINX_VERBOSE=1 prove -v test/plain-http-variables.t
+sudo -E env PATH="$PATH" PERL5LIB="$PERL5LIB" \
+    TEST_NGINX_BINARY="$TEST_NGINX_BINARY" prove -v test/ja4t-variables.t
 ```
 
-Current files:
+### pytest integration tests
 
-- `test/plain-http-variables.t` — module loads (`$http_ssl_ja4h`), SSL JA4 vars empty and safe on plain HTTP (including `$http_ssl_ja4t` with `tcp_save_syn` off)
-- `test/ja4t-variables.t` — JA4T goldens via [curlu](https://github.com/lynch1981/curlu) `--ja4t` (HTTP, IPv4, root)
+The Python suite checks TLS fingerprints, ClientHello edge cases and JA4H against golden files in `test/testdata/`, using containerized curl, Go/uTLS and `curl_cffi` clients.
 
-JA4T goldens need curlu’s `curl` wrapper on `PATH` and root (`ip` + `nft`).
+Start the Quick start environment first. With Python 3, Go 1.24+ and Docker host networking available, run these commands in a Python virtual environment:
 
 ```bash
-git clone https://github.com/lynch1981/curlu.git
-(cd curlu && ./build.sh)
-sudo -E env \
-    PATH="/path/to/curlu:$PATH" \
-    PERL5LIB="$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}" \
-    TEST_NGINX_BINARY=/path/to/nginx \
-    prove -v test/ja4t-variables.t
+python -m pip install pytest 'curl_cffi==0.16.2'
+python -m pytest
 ```
 
-Without curlu or root, `ja4t-variables.t` is skipped.
+The `curl_cffi` pin matches CI so the client fingerprints remain reproducible. To intentionally update golden files, run `python -m pytest --record` and review the resulting changes.
 
-Runtime tree `test/servroot/` is created by Test::Nginx and is gitignored.
+## Questions
 
-### Integration tests (`test/*.py`)
+If you have questions, feel free to reach out to us at info@foxio.io.
 
-Integration tests run against Docker and validate the module’s TLS fingerprinting against predefined scenarios using golden files in `test/testdata/`.
+## License
 
-Run tests:
-
-```bash
-pytest
-```
-
-Update golden files:
-
-```bash
-pytest --record
-```
-
-Current coverage includes various TLS versions, HTTP protocols, and ALPN/cipher/extension combinations.
-
-
-## Docker
-
-We publish and host Docker images of release versions on GitHub Container Registry. You can pull the image with the following command:
-
-`docker pull ghcr.io/foxio-llc/ja4-nginx-module:v0.9.0-beta`
-
-### Debugging
-
-To develop and debug the Dockerfile container, I find it useful to run docker with `--progress=plain`.
-
-## Developer Guide
-
-Build against official nginx: apply `patches/nginx.patch` (TLS ClientHello capture) **and** `patches/nginx-tcp-save-syn.patch` (opt-in `TCP_SAVE_SYN` / `c->saved_syn`) to the nginx source tree, then configure with `--add-module=/path/to/ja4-nginx-module`.
-
-```bash
-cd nginx-${NGINX_VERSION}
-patch -p1 < /path/to/ja4-nginx-module/patches/nginx.patch
-patch -p1 < /path/to/ja4-nginx-module/patches/nginx-tcp-save-syn.patch
-./configure --add-module=/path/to/ja4-nginx-module --with-http_ssl_module ...
-make && make install
-```
-
-### JA4T (TCP SYN fingerprint)
-
-JA4T is computed from the client TCP SYN. Enable SYN capture **per server** (default off — kernel SYN copies cost memory):
-
-```nginx
-server {
-    listen 8080;
-    tcp_save_syn on;
-
-    access_log logs/access.log '$remote_addr ja4t=$http_ssl_ja4t';
-}
-```
-
-`$http_ssl_ja4t` looks like `64240_2-4-8-1-3_1460_7` (window, option kinds, MSS, window scale).
-
-`TCP_SAVE_SYN` is a listen-socket option. `tcp_save_syn on` (http, server, or stream) turns it on for that server's listen fds. If two `server` blocks share the same `listen` address, enabling it on either one caches SYNs for every connection on that fd. Bind a dedicated address/port if you need to isolate the cost. The blob is stored on `ngx_connection_t.saved_syn` (`ngx_str_t`) for any module to read; JA4T is only one consumer.
-
-Empty `$http_ssl_ja4t` is expected when `tcp_save_syn` is off, on SYN cookies, unix/QUIC. Note that behind a TCP proxy, it will fingerprint the proxy rather than the real client.
-
-The root `Dockerfile` is a full reference build. See also Usage and Testing above for Docker and `pytest`.
-
-## Architecture
-
-### Nginx Variables
-
-We create an Nginx variable for each JA4 fingerprint.
-
-These can be accessed through configuration files for logging purposes, in server definition blocks for custom headers, etc.
-
-All of the logic around these variables are in two files:
-
-1. `ngx_http_ja4_module.c`
-2. `ngx_http_ja4_module.h`
-
-#### Nginx Configuration
-
-An Nginx variable simply needs a string for its name, and a function that calculates and returns the value.
-
-By using this syntax:
-
-```C
-static ngx_http_variable_t ngx_http_ssl_ja4_variables_list[] = {
-    {ngx_string("http_ssl_ja4"),
-     NULL,
-     ngx_http_ssl_ja4,
-     0, 0, 0},
-}
-```
-
-The function the variable maps to, in this case `ngx_http_ssl_ja4`, receives the request sent to Nginx, a variable that will store the result, and a pointer to the variable's data.
-
-```C
-static ngx_int_t ngx_http_ssl_ja4(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
-```
-
-So, this function is called for each request and it is expected to return the data intended for the variable.
-
-In this function, we call two important functions. First:
-
-```C
-int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4);
-```
-
-The first gets the connection object from the request (This is an Nginx native structure that we've modified with the `ja4-nginx` repository to store additional data for the JA4 fingerprint), pulls in SSL data from that object, and processes it to be stored in a custom structure (defined in the header file) for this module's Nginx variable.
-
-For this example:
-
-```C
-typedef struct ngx_ssl_ja4_s
-{
-    const char *version; // TLS version
-
-    unsigned char transport; // 'q' for QUIC, 't' for TCP
-
-    unsigned char has_sni; // 'd' if SNI is present, 'i' otherwise
-
-    size_t ciphers_sz;       // Count of ciphers
-    unsigned short *ciphers; // List of ciphers
-
-    size_t extensions_sz;       // Count of extensions
-    unsigned short *extensions; // List of extensions
-
-    size_t sigalgs_sz;       // Count of signature algorithms
-    char **sigalgs; // List of signature algorithms
-
-    // For the first and last ALPN extension values
-    char *alpn_first_value;
-
-    char cipher_hash[65];           // 32 bytes * 2 characters/byte + 1 for '\0'
-    char cipher_hash_truncated[13]; // 12 bytes * 2 characters/byte + 1 for '\0'
-
-    char extension_hash[65];           // 32 bytes * 2 characters/byte + 1 for '\0'
-    char extension_hash_truncated[13]; // 6 bytes * 2 characters/byte + 1 for '\0'
-
-} ngx_ssl_ja4_t;
-```
-
-The second important function is the one that actually calculates the JA4 fingerprint:
-
-```C
-void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t*ja4, ngx_str_t *out);
-```
-
-It simply takes the data structure and uses it to calculate what the single string value of the JA4 fingerprint should be.
+See [LICENSE](LICENSE) for the FoxIO License 1.1 terms.
