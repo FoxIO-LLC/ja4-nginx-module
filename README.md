@@ -129,6 +129,10 @@ python -m pytest
 
 The `curl_cffi` pin matches CI so the client fingerprints remain reproducible. To intentionally update golden files, run `python -m pytest --record` and review the resulting changes.
 
+## Questions
+
+If you have questions, feel free to reach out to us at info@foxio.io.
+
 ## License
 
 See [LICENSE](LICENSE) for the FoxIO License 1.1 terms.
