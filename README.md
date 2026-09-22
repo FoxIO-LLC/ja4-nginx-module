@@ -8,13 +8,7 @@ This repository contains an nginx module that generates fingerprints from the JA
 
 ## Usage
 
-Docker images and compose files are available in `./docker`. The QUIC and ModSecurity images are still WIP.
-
-You can quickly test out this module with:
-1. `cd docker`
-2. `docker-compose up --build`
-
-A multi-stage `Dockerfile` is also included in the project root. You can run the build directly from the root using:
+A multi-stage `Dockerfile` is included in the project root. You can run the build directly from the root using:
 
 ```bash
 docker-compose up --build
@@ -148,28 +142,6 @@ server {
 Empty `$http_ssl_ja4t` is expected when `tcp_save_syn` is off, on SYN cookies, unix/QUIC. Note that behind a TCP proxy, it will fingerprint the proxy rather than the real client.
 
 The root `Dockerfile` is a full reference build. See also Usage and Testing above for Docker and `pytest`.
-
-## Creating a Release
-
-1. Tag the release
-`git tag -a vx.y.z-beta -m "Release version x.y.z"`
-2. Run script
-`./release.sh`
-3. Push tag to GitHub
-`git push origin vx.y.z-beta`
-4. Create a release on GitHub
-Manually upload the tar.gz file and the sha256sum
-
-### Release a Docker Image to GitHub Container Registry
-
-Update the file `docker/Dockerfile` to pull from the most recently published release. Then build and tag the image:
-`cd docker`
-READ BELOW
-UPDATE JA4_MODULE_VERSION IN DOCKERFILE TO BUILD FROM NEW RELEASE
-`docker build -t ghcr.io/foxio-llc/ja4-nginx-module:vx.y.z-beta .`
-
-Then push the image to the GitHub Container Registry:
-`docker push ghcr.io/foxio-llc/ja4-nginx-module:vx.y.z-beta`
 
 ## Architecture
 
