@@ -1650,7 +1650,12 @@ ngx_http_ssl_ja4t(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    rc = ngx_http_ja4t(r->connection, r->pool, &fp);
+#ifdef NGX_HAVE_TCP_SAVE_SYN
+    rc = ngx_http_ja4t(r->connection, &fp);
+#else
+    rc = NGX_DECLINED;
+#endif
+
     if (rc != NGX_OK) {
         v->not_found = 1;
         return rc == NGX_ERROR ? NGX_ERROR : NGX_OK;

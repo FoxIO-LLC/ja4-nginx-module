@@ -6,6 +6,7 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 
+#ifdef NGX_HAVE_TCP_SAVE_SYN
 
 #define NGX_HTTP_JA4T_MAX_KINDS  40
 
@@ -23,7 +24,8 @@ typedef struct {
 ngx_int_t ngx_http_ja4t_parse_syn(const u_char *buf, size_t len,
     ngx_http_ja4t_t *ja4t);
 
-ngx_int_t ngx_http_ja4t(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *out);
+ngx_int_t ngx_http_ja4t(ngx_connection_t *c, ngx_str_t *out);
 
+#endif /* NGX_HAVE_TCP_SAVE_SYN */
 
 #endif /* _NGX_HTTP_JA4T_H_INCLUDED_ */
