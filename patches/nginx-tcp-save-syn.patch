@@ -7,7 +7,7 @@ Default off. Enable with:
 Accepted connections store the client SYN (IP+TCP headers) in
 ngx_connection_t.saved_syn (ngx_str_t) for any module to read.
 
-Apply on vanilla nginx 1.20+ (separate from the JA4 ClientHello patch):
+Apply on vanilla nginx 1.26+ (separate from the JA4 ClientHello patch):
 
     patch -p1 < patches/nginx-tcp-save-syn.patch
 
@@ -315,12 +315,28 @@ Apply on vanilla nginx 1.20+ (separate from the JA4 ClientHello patch):
 
 --- a/src/stream/ngx_stream.c
 +++ b/src/stream/ngx_stream.c
-@@ -1044,1 +1044,7 @@
+@@ -1042,6 +1042,23 @@
+     ls->fastopen = addr->opt.fastopen;
+ #endif
+ 
 +#if (NGX_HAVE_TCP_SAVE_SYN)
-+    if (cscf->tcp_save_syn && ngx_tcp_save_syn_eligible(ls)) {
-+        ls->save_syn = 1;
++    {
++        ngx_uint_t                    s;
++        ngx_stream_core_srv_conf_t  **cscfp;
++
++        cscfp = addr->servers.elts;
++        for (s = 0; s < addr->servers.nelts; s++) {
++            if (cscfp[s]->tcp_save_syn
++                && ngx_tcp_save_syn_eligible(ls))
++            {
++                ls->save_syn = 1;
++                break;
++            }
++        }
 +    }
 +#endif
 +
  #if (NGX_HAVE_REUSEPORT)
+     ls->reuseport = addr->opt.reuseport;
+ #endif
 
