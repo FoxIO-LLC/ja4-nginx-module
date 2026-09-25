@@ -7,7 +7,7 @@ Default off. Enable with:
 Accepted connections store the client SYN (IP+TCP headers) in
 ngx_connection_t.saved_syn (ngx_str_t) for any module to read.
 
-Apply on vanilla nginx (separate from the JA4 ClientHello patch):
+Apply on vanilla nginx 1.26+ (separate from the JA4 ClientHello patch):
 
     patch -p1 < patches/nginx-tcp-save-syn.patch
 
@@ -73,32 +73,39 @@ Apply on vanilla nginx (separate from the JA4 ClientHello patch):
  };
  
  
-@@ -203,6 +207,10 @@
+@@ -203,6 +207,11 @@
  #if (NGX_THREADS || NGX_COMPAT)
      ngx_thread_task_t  *sendfile_task;
  #endif
 +
 +#if (NGX_HAVE_TCP_SAVE_SYN)
 +    ngx_str_t           saved_syn;  /* binary IP+TCP headers; empty if unset */
++    ngx_str_t           ja4t;       /* formatted JA4T; empty until first lookup */
 +#endif
  };
  
  
-@@ -234,6 +242,28 @@
+@@ -234,6 +243,34 @@
  ngx_connection_t *ngx_get_connection(ngx_socket_t s, ngx_log_t *log);
  void ngx_free_connection(ngx_connection_t *c);
  
 +#if (NGX_HAVE_TCP_SAVE_SYN)
 +
 +static ngx_inline ngx_uint_t
-+ngx_tcp_save_syn_eligible(int type, ngx_uint_t quic, struct sockaddr *sa)
++ngx_tcp_save_syn_eligible(ngx_listening_t *ls)
 +{
-+    if (type != SOCK_STREAM || quic) {
++    if (ls->type != SOCK_STREAM) {
 +        return 0;
 +    }
 +
++#if (NGX_QUIC)
++    if (ls->quic) {
++        return 0;
++    }
++#endif
++
 +#if (NGX_HAVE_UNIX_DOMAIN)
-+    if (sa != NULL && sa->sa_family == AF_UNIX) {
++    if (ls->sockaddr != NULL && ls->sockaddr->sa_family == AF_UNIX) {
 +        return 0;
 +    }
 +#endif
@@ -121,7 +128,7 @@ Apply on vanilla nginx (separate from the JA4 ClientHello patch):
  #endif
  
 +#if (NGX_HAVE_TCP_SAVE_SYN)
-+        if (ngx_tcp_save_syn_eligible(ls[i].type, ls[i].quic, ls[i].sockaddr)) {
++        if (ngx_tcp_save_syn_eligible(&ls[i])) {
 +            value = ls[i].save_syn ? 1 : 0;
 +
 +            if (setsockopt(ls[i].fd, IPPROTO_TCP, TCP_SAVE_SYN,
@@ -199,14 +206,12 @@ Apply on vanilla nginx (separate from the JA4 ClientHello patch):
 
 --- a/src/http/ngx_http_core_module.h
 +++ b/src/http/ngx_http_core_module.h
-@@ -204,6 +204,7 @@
-     ngx_flag_t                  ignore_invalid_headers;
-     ngx_flag_t                  merge_slashes;
-     ngx_flag_t                  underscores_in_headers;
-+    ngx_flag_t                  tcp_save_syn;
+@@ -208,4 +208,5 @@
  
++    ngx_flag_t                  tcp_save_syn;
      unsigned                    listen:1;
  #if (NGX_PCRE)
+     unsigned                    captures:1;
 
 --- a/src/http/ngx_http_core_module.c
 +++ b/src/http/ngx_http_core_module.c
@@ -224,17 +229,13 @@ Apply on vanilla nginx (separate from the JA4 ClientHello patch):
      { ngx_string("location"),
        NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_BLOCK|NGX_CONF_TAKE12,
        ngx_http_core_location,
-@@ -3550,6 +3557,7 @@
-     cscf->ignore_invalid_headers = NGX_CONF_UNSET;
-     cscf->merge_slashes = NGX_CONF_UNSET;
-     cscf->underscores_in_headers = NGX_CONF_UNSET;
+@@ -3554,4 +3554,5 @@
 +    cscf->tcp_save_syn = NGX_CONF_UNSET;
- 
      cscf->file_name = cf->conf_file->file.name.data;
      cscf->line = cf->conf_file->line;
-@@ -3598,6 +3606,8 @@
-     ngx_conf_merge_value(conf->underscores_in_headers,
-                               prev->underscores_in_headers, 0);
+ 
+     return cscf;
+@@ -3601,4 +3602,6 @@
  
 +    ngx_conf_merge_value(conf->tcp_save_syn, prev->tcp_save_syn, 0);
 +
@@ -244,7 +245,7 @@ Apply on vanilla nginx (separate from the JA4 ClientHello patch):
 
 --- a/src/http/ngx_http.c
 +++ b/src/http/ngx_http.c
-@@ -1878,6 +1878,24 @@
+@@ -1878,6 +1878,23 @@
      ls->fastopen = addr->opt.fastopen;
  #endif
  
@@ -256,8 +257,7 @@ Apply on vanilla nginx (separate from the JA4 ClientHello patch):
 +        cscfp = addr->servers.elts;
 +        for (s = 0; s < addr->servers.nelts; s++) {
 +            if (cscfp[s]->tcp_save_syn
-+                && ngx_tcp_save_syn_eligible(addr->opt.type, addr->opt.quic,
-+                                             addr->opt.sockaddr))
++                && ngx_tcp_save_syn_eligible(ls))
 +            {
 +                ls->save_syn = 1;
 +                break;
@@ -272,9 +272,7 @@ Apply on vanilla nginx (separate from the JA4 ClientHello patch):
 
 --- a/src/stream/ngx_stream.h
 +++ b/src/stream/ngx_stream.h
-@@ -156,6 +156,7 @@
-     ngx_str_t                      server_name;
- 
+@@ -180,3 +180,4 @@
      ngx_flag_t                     tcp_nodelay;
 +    ngx_flag_t                     tcp_save_syn;
      size_t                         preread_buffer_size;
@@ -317,7 +315,7 @@ Apply on vanilla nginx (separate from the JA4 ClientHello patch):
 
 --- a/src/stream/ngx_stream.c
 +++ b/src/stream/ngx_stream.c
-@@ -1042,6 +1042,24 @@
+@@ -1042,6 +1042,23 @@
      ls->fastopen = addr->opt.fastopen;
  #endif
  
@@ -329,8 +327,7 @@ Apply on vanilla nginx (separate from the JA4 ClientHello patch):
 +        cscfp = addr->servers.elts;
 +        for (s = 0; s < addr->servers.nelts; s++) {
 +            if (cscfp[s]->tcp_save_syn
-+                && ngx_tcp_save_syn_eligible(addr->opt.type, 0,
-+                                             addr->opt.sockaddr))
++                && ngx_tcp_save_syn_eligible(ls))
 +            {
 +                ls->save_syn = 1;
 +                break;
