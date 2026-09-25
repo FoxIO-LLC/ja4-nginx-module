@@ -123,9 +123,15 @@ jobs:
       - name: Run Test::Nginx (unprivileged)
         run: |
           set -euo pipefail
+          export TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx"
+          prove -v $(ls test/*.t | grep -Ev '/(ja4t|tls-ja4)-variables\.t$')
+
+      - name: Run TLS JA4 tests (curlu)
+        run: |
+          set -euo pipefail
           export PATH="${BUILD_DIR}/curlu-${CURLU_VERSION}:${PATH}"
           export TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx"
-          prove -v $(ls test/*.t | grep -v 'ja4t-variables\.t')
+          prove -v test/tls-ja4-variables.t
 
       # Run last: curlu crafts SYN packets using root-only network operations.
       - name: Run JA4T tests (root)
