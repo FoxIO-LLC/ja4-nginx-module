@@ -161,6 +161,7 @@ ngx_http_ja4t(ngx_connection_t *c, ngx_str_t *out)
 #endif
 
     if (c->ja4t.data != NULL) {
+        ngx_log_error(NGX_LOG_DEBUG, c->log, 0, "ja4t cache hit");
         *out = c->ja4t;
         return NGX_OK;
     }

@@ -1642,16 +1642,24 @@ static ngx_int_t
 ngx_http_ssl_ja4t(ngx_http_request_t *r,
                   ngx_http_variable_value_t *v, uintptr_t data)
 {
-    ngx_str_t  fp;
-    ngx_int_t  rc;
+    ngx_connection_t  *c;
+    ngx_str_t          fp;
+    ngx_int_t          rc;
 
-    if (r->connection == NULL) {
+    c = r->connection;
+    if (c == NULL) {
         v->not_found = 1;
         return NGX_OK;
     }
 
+#if (NGX_HTTP_V2)
+    if (r->stream) {
+        c = r->stream->connection->connection;
+    }
+#endif
+
 #ifdef NGX_HAVE_TCP_SAVE_SYN
-    rc = ngx_http_ja4t(r->connection, &fp);
+    rc = ngx_http_ja4t(c, &fp);
 #else
     rc = NGX_DECLINED;
 #endif
