@@ -1,0 +1,299 @@
+Optional tcp_save_synack core integration (ebpf addon, HTTP upstreams).
+
+Apply to Nginx, then configure with --add-module=/path/to/ja4-nginx-module/ebpf
+to enable the feature. Independent of the client TCP_SAVE_SYN patch.
+
+New fields are appended after existing members, and builds with the addon add
+a module signature bit, so --with-compat modules built without it are refused
+instead of reading shifted structures.
+
+diff --git a/src/core/ngx_connection.c b/src/core/ngx_connection.c
+--- a/src/core/ngx_connection.c
++++ b/src/core/ngx_connection.c
+@@ -1346,6 +1346,10 @@ ngx_close_connection(ngx_connection_t *c)
+         return;
+     }
+ 
++#if (NGX_HAVE_EBPF)
++    ngx_connection_cleanup_synack(c);
++#endif
++
+     if (c->read->timer_set) {
+         ngx_del_timer(c->read);
+     }
+diff --git a/src/core/ngx_connection.h b/src/core/ngx_connection.h
+--- a/src/core/ngx_connection.h
++++ b/src/core/ngx_connection.h
+@@ -200,6 +200,11 @@ struct ngx_connection_s {
+     unsigned            need_last_buf:1;
+     unsigned            need_flush_buf:1;
+ 
++#if (NGX_HAVE_EBPF)
++    unsigned            synack_enabled:1;
++    unsigned            synack_processed:1;
++#endif
++
+ #if (NGX_HAVE_SENDFILE_NODISKIO || NGX_COMPAT)
+     unsigned            busy_count:2;
+ #endif
+@@ -211,6 +216,11 @@ struct ngx_connection_s {
+ #if (NGX_HAVE_TCP_SAVE_SYN)
+     ngx_str_t           saved_syn;  /* binary IP+TCP headers; empty if unset */
+ #endif
++
++#if (NGX_HAVE_EBPF)
++    ngx_str_t           saved_synack;  /* upstream IP+TCP headers */
++    uint64_t            synack_cookie;
++#endif
+ };
+ 
+ 
+diff --git a/src/core/ngx_core.h b/src/core/ngx_core.h
+--- a/src/core/ngx_core.h
++++ b/src/core/ngx_core.h
+@@ -121,4 +121,8 @@ void ngx_cpuinfo(void);
+ #define NGX_DISABLE_SYMLINKS_NOTOWNER   2
+ #endif
+ 
++#if (NGX_HAVE_EBPF)
++#include <ngx_ebpf_module.h>
++#endif
++
+ #endif /* _NGX_CORE_H_INCLUDED_ */
+diff --git a/src/core/ngx_module.h b/src/core/ngx_module.h
+--- a/src/core/ngx_module.h
++++ b/src/core/ngx_module.h
+@@ -202,6 +202,13 @@
+ #define NGX_MODULE_SIGNATURE_34  "0"
+ #endif
+ 
++/* The ebpf addon extends shared structures; plain builds keep the signature. */
++#if (NGX_HAVE_EBPF)
++#define NGX_MODULE_SIGNATURE_35  "E"
++#else
++#define NGX_MODULE_SIGNATURE_35  ""
++#endif
++
+ #define NGX_MODULE_SIGNATURE                                                  \
+     NGX_MODULE_SIGNATURE_0 NGX_MODULE_SIGNATURE_1 NGX_MODULE_SIGNATURE_2      \
+     NGX_MODULE_SIGNATURE_3 NGX_MODULE_SIGNATURE_4 NGX_MODULE_SIGNATURE_5      \
+@@ -214,7 +221,7 @@
+     NGX_MODULE_SIGNATURE_24 NGX_MODULE_SIGNATURE_25 NGX_MODULE_SIGNATURE_26   \
+     NGX_MODULE_SIGNATURE_27 NGX_MODULE_SIGNATURE_28 NGX_MODULE_SIGNATURE_29   \
+     NGX_MODULE_SIGNATURE_30 NGX_MODULE_SIGNATURE_31 NGX_MODULE_SIGNATURE_32   \
+-    NGX_MODULE_SIGNATURE_33 NGX_MODULE_SIGNATURE_34
++    NGX_MODULE_SIGNATURE_33 NGX_MODULE_SIGNATURE_34 NGX_MODULE_SIGNATURE_35
+ 
+ 
+ #define NGX_MODULE_V1                                                         \
+diff --git a/src/event/ngx_event_connect.c b/src/event/ngx_event_connect.c
+--- a/src/event/ngx_event_connect.c
++++ b/src/event/ngx_event_connect.c
+@@ -218,6 +218,10 @@ ngx_event_connect_peer(ngx_peer_connection_t *pc)
+     ngx_log_debug3(NGX_LOG_DEBUG_EVENT, pc->log, 0,
+                    "connect to %V, fd:%d #%uA", pc->name, s, c->number);
+ 
++#if (NGX_HAVE_EBPF)
++    ngx_connection_register_synack(c, pc->sockaddr, pc->save_synack);
++#endif
++
+     rc = connect(s, pc->sockaddr, pc->socklen);
+ 
+     if (rc == -1) {
+diff --git a/src/event/ngx_event_connect.h b/src/event/ngx_event_connect.h
+--- a/src/event/ngx_event_connect.h
++++ b/src/event/ngx_event_connect.h
+@@ -74,6 +74,10 @@ struct ngx_peer_connection_s {
+                                      /* ngx_connection_log_error_e */
+     unsigned                         log_error:2;
+ 
++#if (NGX_HAVE_EBPF)
++    unsigned                         save_synack:1;
++#endif
++
+     NGX_COMPAT_BEGIN(1)
+     NGX_COMPAT_END
+ };
+diff --git a/src/http/ngx_http_core_module.c b/src/http/ngx_http_core_module.c
+--- a/src/http/ngx_http_core_module.c
++++ b/src/http/ngx_http_core_module.c
+@@ -465,6 +465,13 @@ static ngx_command_t  ngx_http_core_commands[] = {
+       offsetof(ngx_http_core_loc_conf_t, tcp_nopush),
+       NULL },
+ 
++    { ngx_string("tcp_save_synack"),
++      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_FLAG,
++      ngx_conf_set_flag_slot,
++      NGX_HTTP_LOC_CONF_OFFSET,
++      offsetof(ngx_http_core_loc_conf_t, tcp_save_synack),
++      NULL },
++
+     { ngx_string("tcp_nodelay"),
+       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_FLAG,
+       ngx_conf_set_flag_slot,
+@@ -3696,6 +3703,7 @@ ngx_http_core_create_loc_conf(ngx_conf_t *cf)
+     clcf->directio = NGX_CONF_UNSET;
+     clcf->directio_alignment = NGX_CONF_UNSET;
+     clcf->tcp_nopush = NGX_CONF_UNSET;
++    clcf->tcp_save_synack = NGX_CONF_UNSET;
+     clcf->tcp_nodelay = NGX_CONF_UNSET;
+     clcf->send_timeout = NGX_CONF_UNSET_MSEC;
+     clcf->send_lowat = NGX_CONF_UNSET_SIZE;
+@@ -3929,6 +3937,19 @@ ngx_http_core_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
+                               512);
+     ngx_conf_merge_value(conf->tcp_nopush, prev->tcp_nopush, 0);
+     ngx_conf_merge_value(conf->tcp_nodelay, prev->tcp_nodelay, 1);
++    ngx_conf_merge_value(conf->tcp_save_synack, prev->tcp_save_synack, 0);
++    if (conf->tcp_save_synack) {
++#if (NGX_HAVE_EBPF)
++        if (ngx_ebpf_require(cf) != NGX_OK) {
++            return NGX_CONF_ERROR;
++        }
++#else
++        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
++                           "tcp_save_synack requires the optional ebpf core "
++                           "module");
++        return NGX_CONF_ERROR;
++#endif
++    }
+ 
+     ngx_conf_merge_msec_value(conf->send_timeout, prev->send_timeout, 60000);
+     ngx_conf_merge_size_value(conf->send_lowat, prev->send_lowat, 0);
+diff --git a/src/http/ngx_http_core_module.h b/src/http/ngx_http_core_module.h
+--- a/src/http/ngx_http_core_module.h
++++ b/src/http/ngx_http_core_module.h
+@@ -454,6 +454,8 @@ struct ngx_http_core_loc_conf_s {
+ 
+     ngx_queue_t  *locations;
+ 
++    ngx_flag_t    tcp_save_synack;         /* tcp_save_synack */
++
+ #if 0
+     ngx_http_core_loc_conf_t  *prev_location;
+ #endif
+diff --git a/src/http/ngx_http_upstream.c b/src/http/ngx_http_upstream.c
+--- a/src/http/ngx_http_upstream.c
++++ b/src/http/ngx_http_upstream.c
+@@ -56,6 +56,10 @@ static ngx_int_t ngx_http_upstream_test_next(ngx_http_request_t *r,
+ static ngx_int_t ngx_http_upstream_intercept_errors(ngx_http_request_t *r,
+     ngx_http_upstream_t *u);
+ static ngx_int_t ngx_http_upstream_test_connect(ngx_connection_t *c);
++#if (NGX_HAVE_EBPF)
++static void ngx_http_upstream_save_synack(ngx_http_request_t *r,
++    ngx_http_upstream_t *u);
++#endif
+ static ngx_int_t ngx_http_upstream_process_headers(ngx_http_request_t *r,
+     ngx_http_upstream_t *u);
+ static ngx_int_t ngx_http_upstream_process_trailers(ngx_http_request_t *r,
+@@ -1567,6 +1571,34 @@ ngx_http_upstream_check_broken_connection(ngx_http_request_t *r,
+ }
+ 
+ 
++#if (NGX_HAVE_EBPF)
++static void
++ngx_http_upstream_save_synack(ngx_http_request_t *r, ngx_http_upstream_t *u)
++{
++    u_char                    *p;
++    ngx_connection_t          *c;
++    ngx_http_core_loc_conf_t  *clcf;
++
++    c = u->peer.connection;
++    clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
++    if (c == NULL || u->state == NULL || !clcf->tcp_save_synack) {
++        return;
++    }
++    ngx_connection_save_synack(c);
++    if (u->state->saved_synack.len || !c->saved_synack.len) {
++        return;
++    }
++    p = ngx_pnalloc(r->pool, c->saved_synack.len);
++    if (p == NULL) {
++        return; /* Optional metadata must not fail upstream traffic. */
++    }
++    ngx_memcpy(p, c->saved_synack.data, c->saved_synack.len);
++    u->state->saved_synack.data = p;
++    u->state->saved_synack.len = c->saved_synack.len;
++}
++#endif
++
++
+ static void
+ ngx_http_upstream_connect(ngx_http_request_t *r, ngx_http_upstream_t *u)
+ {
+@@ -1595,6 +1627,10 @@ ngx_http_upstream_connect(ngx_http_request_t *r, ngx_http_upstream_t *u)
+     u->state->connect_time = (ngx_msec_t) -1;
+     u->state->header_time = (ngx_msec_t) -1;
+ 
++#if (NGX_HAVE_EBPF)
++    clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
++    u->peer.save_synack = clcf->tcp_save_synack;
++#endif
+     rc = ngx_event_connect_peer(&u->peer);
+ 
+     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+@@ -1674,6 +1710,9 @@ ngx_http_upstream_connect(ngx_http_request_t *r, ngx_http_upstream_t *u)
+ 
+     c->log = r->connection->log;
+     c->pool->log = c->log;
++#if (NGX_HAVE_EBPF)
++    ngx_http_upstream_save_synack(r, u);
++#endif
+     c->read->log = c->log;
+     c->write->log = c->log;
+ 
+@@ -1756,6 +1795,9 @@ ngx_http_upstream_ssl_init_connection(ngx_http_request_t *r,
+         ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_ERROR);
+         return;
+     }
++#if (NGX_HAVE_EBPF)
++    ngx_http_upstream_save_synack(r, u);
++#endif
+ 
+     if (ngx_ssl_create_connection(u->conf->ssl, c,
+                                   NGX_SSL_BUFFER|NGX_SSL_CLIENT)
+@@ -2178,6 +2220,9 @@ ngx_http_upstream_send_request(ngx_http_request_t *r, ngx_http_upstream_t *u,
+         ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_ERROR);
+         return;
+     }
++#if (NGX_HAVE_EBPF)
++    ngx_http_upstream_save_synack(r, u);
++#endif
+ 
+     c->log->action = "sending request to upstream";
+ 
+@@ -4602,6 +4647,10 @@ ngx_http_upstream_next(ngx_http_request_t *r, ngx_http_upstream_t *u,
+     ngx_msec_t  timeout;
+     ngx_uint_t  status, state;
+ 
++#if (NGX_HAVE_EBPF)
++    ngx_http_upstream_save_synack(r, u);
++#endif
++
+     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                    "http next upstream, %xi", ft_type);
+ 
+@@ -4785,6 +4834,10 @@ ngx_http_upstream_finalize_request(ngx_http_request_t *r,
+     *u->cleanup = NULL;
+     u->cleanup = NULL;
+ 
++#if (NGX_HAVE_EBPF)
++    ngx_http_upstream_save_synack(r, u);
++#endif
++
+     if (u->resolved && u->resolved->ctx) {
+         ngx_resolve_name_done(u->resolved->ctx);
+         u->resolved->ctx = NULL;
+diff --git a/src/http/ngx_http_upstream.h b/src/http/ngx_http_upstream.h
+--- a/src/http/ngx_http_upstream.h
++++ b/src/http/ngx_http_upstream.h
+@@ -72,6 +72,10 @@ typedef struct {
+ 
+     ngx_str_t                       *peer;
+ 
++#if (NGX_HAVE_EBPF)
++    ngx_str_t                        saved_synack;
++#endif
++
+     NGX_COMPAT_BEGIN(2)
+     NGX_COMPAT_END
+ } ngx_http_upstream_state_t;

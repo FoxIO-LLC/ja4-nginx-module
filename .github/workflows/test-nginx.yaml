@@ -106,6 +106,7 @@ jobs:
             < "${GITHUB_WORKSPACE}/patches/nginx-ssl-save-client-hello.patch"
           patch -p1 -d "${nginx_src}" \
             < "${GITHUB_WORKSPACE}/patches/nginx-tcp-save-syn.patch"
+          # JA4TS (SYN-ACK patch and ebpf addon) is not built or tested in CI.
 
       - name: Build nginx with JA4 module (${{ matrix.name }})
         run: |
@@ -136,7 +137,7 @@ jobs:
         run: |
           set -euo pipefail
           export TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx"
-          prove -v $(ls test/test-nginx/*.t | grep -Ev '/(ja4t|tls-ja4|http3-ja4)-variables\.t$')
+          prove -v $(ls test/test-nginx/*.t | grep -Ev '/(ja4t|tls-ja4|http3-ja4)-variables\.t$|/ja4ts-')
 
       - name: Run HTTP/3 JA4 tests (snap curl)
         run: |
