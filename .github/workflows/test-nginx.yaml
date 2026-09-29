@@ -95,6 +95,7 @@ jobs:
             < "${GITHUB_WORKSPACE}/patches/nginx.patch"
           patch -p1 -d "${nginx_src}" \
             < "${GITHUB_WORKSPACE}/patches/nginx-tcp-save-syn.patch"
+          # JA4TS (SYN-ACK patch and ebpf addon) is covered by test-ebpf.yaml.
 
       - name: Build nginx with JA4 module (${{ matrix.name }})
         run: |
@@ -124,7 +125,7 @@ jobs:
         run: |
           set -euo pipefail
           export TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx"
-          prove -v $(ls test/*.t | grep -Ev '/(ja4t|tls-ja4)-variables\.t$')
+          prove -v $(ls test/*.t | grep -Ev '/(ja4t|tls-ja4)-variables\.t$|/ja4ts-')
 
       - name: Run TLS JA4 tests (curlu)
         run: |

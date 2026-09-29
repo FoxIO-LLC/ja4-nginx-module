@@ -51,12 +51,12 @@ GET /t
 --- config
     location /t {
         default_type text/plain;
-        return 200 "ja4=$http_ssl_ja4 ja4_string=$http_ssl_ja4_string ja4one=$http_ssl_ja4one ja4s=$http_ssl_ja4s ja4s_string=$http_ssl_ja4s_string ja4l=$http_ssl_ja4l ja4t=$http_ssl_ja4t ja4t_string=$http_ssl_ja4t_string ja4ts=$http_ssl_ja4ts ja4ts_string=$http_ssl_ja4ts_string ja4x=$http_ssl_ja4x ja4x_string=$http_ssl_ja4x_string\n";
+        return 200 "ja4=$http_ssl_ja4 ja4_string=$http_ssl_ja4_string ja4one=$http_ssl_ja4one ja4s=$http_ssl_ja4s ja4s_string=$http_ssl_ja4s_string ja4l=$http_ssl_ja4l ja4t=$http_ssl_ja4t ja4t_string=$http_ssl_ja4t_string ja4ts=$upstream_ja4ts ja4x=$http_ssl_ja4x ja4x_string=$http_ssl_ja4x_string\n";
     }
 --- request
 GET /t
 --- response_body
-ja4= ja4_string= ja4one= ja4s= ja4s_string= ja4l= ja4t= ja4t_string= ja4ts= ja4ts_string= ja4x= ja4x_string=
+ja4= ja4_string= ja4one= ja4s= ja4s_string= ja4l= ja4t= ja4t_string= ja4ts= ja4x= ja4x_string=
 --- no_error_log
 [error]
 
