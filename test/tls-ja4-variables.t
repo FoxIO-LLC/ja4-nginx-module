@@ -15,6 +15,12 @@
 #   TESTs 15-16 SNI d vs IP i (tls13_h2 / no_sni_ip) and TLS 1.2 + h1 (tls12_h11)
 # alpine/curl 30-cipher ClientHellos are not reproducible with curlu parrots.
 #
+# Relocation regressions:
+#   TESTs 17-19 GREASE lookalikes, all 16 GREASE cipher IDs, and duplicates
+#   TESTs 20-21 exact extension/signature lists, ALPN counts, variable-read order
+#   TESTs 22-23 offered ALPN/TLS values versus negotiated values
+# These use existing curlu flags; arbitrary extension IDs are not injectable.
+#
 # Run:
 #   export TEST_NGINX_BINARY=/path/to/nginx
 #   export PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}
@@ -395,3 +401,173 @@ GET /t
 
 
 
+=== TEST 17: non_grease_cipher_with_matching_low_nibbles
+# 0x1a2a is not GREASE: the bytes differ despite matching low nibbles.
+# Keep it in the count and hash. Chrome_133 has no PADDING extension,
+# so the complete fingerprint is stable despite shuffled wire extensions.
+# Cipher hash = SHA256(sorted comma-separated list below)[:12].
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "ja4=$http_ssl_ja4\nja4_string=$http_ssl_ja4_string\nja4one=$http_ssl_ja4one\n";
+    }
+--- curl_protocol: https
+--- server_addr_for_client: example.test
+--- curl_options: --utls-hello HelloChrome_133 --utls-cipher-append 0x1a2a
+--- request
+GET /t
+--- response_body
+ja4=t13d1616h2_38af97adec30_d8a2da3f94cd
+ja4_string=t13d1616h2_002f,0035,009c,009d,1301,1302,1303,1a2a,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601
+ja4one=t13d1614h2_38af97adec30_1e53c2b25e87
+--- no_error_log
+[error]
+
+
+
+=== TEST 18: all_grease_cipher_ids_are_excluded
+# Append every actual GREASE cipher after curlu has built its preset.
+# Counts, hashes, and raw lists must stay identical to unmodified Chrome_133.
+# The exact extension list also excludes the preset's GREASE extensions.
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "ja4=$http_ssl_ja4\nja4_string=$http_ssl_ja4_string\nja4one=$http_ssl_ja4one\n";
+    }
+--- curl_protocol: https
+--- server_addr_for_client: example.test
+--- curl_options eval
+CORE::join ' ', '--utls-hello HelloChrome_133',
+    map { sprintf '--utls-cipher-append 0x%04x', 0x0a0a + $_ * 0x1010 } 0..15
+--- request
+GET /t
+--- response_body
+ja4=t13d1516h2_8daaf6152771_d8a2da3f94cd
+ja4_string=t13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601
+ja4one=t13d1514h2_8daaf6152771_1e53c2b25e87
+--- no_error_log
+[error]
+
+
+
+=== TEST 19: grease_lookalikes_and_duplicate_cipher_are_preserved
+# 0x0afa and 0xfa0a also have GREASE-shaped low nibbles with unequal bytes.
+# The appended 0x1301 is a duplicate, counted and hashed twice. Appended
+# order differs from numeric order, so the raw output must be sorted.
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "ja4=$http_ssl_ja4\nja4_string=$http_ssl_ja4_string\nja4one=$http_ssl_ja4one\n";
+    }
+--- curl_protocol: https
+--- server_addr_for_client: example.test
+--- curl_options: --utls-hello HelloChrome_133 --utls-cipher-append 0xfa0a --utls-cipher-append 0x0afa --utls-cipher-append 0x1301
+--- request
+GET /t
+--- response_body
+ja4=t13d1816h2_41fd13d58192_d8a2da3f94cd
+ja4_string=t13d1816h2_002f,0035,009c,009d,0afa,1301,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9,fa0a_0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601
+ja4one=t13d1814h2_41fd13d58192_1e53c2b25e87
+--- no_error_log
+[error]
+
+
+
+=== TEST 20: no_alpn_preserves_extension_hash_and_signature_order
+# Firefox_55 is small enough to avoid PADDING. Removing ALPN lowers the
+# extension count from 08 to 07 while leaving the extension hash unchanged.
+# Signature schemes stay in offered order, not numeric order.
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "ja4=$http_ssl_ja4\nja4_string=$http_ssl_ja4_string\nja4one=$http_ssl_ja4one\n";
+    }
+--- curl_protocol: https
+--- curl_options: --utls-hello HelloFirefox_55 --utls-alpn-none
+--- request
+GET /t
+--- response_body
+ja4=t12i150700_073e58a039a6_e70312a1ce2c
+ja4_string=t12i150700_000a,002f,0033,0035,0039,c009,c00a,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0017,0023,ff01_0403,0503,0603,0804,0805,0806,0401,0501,0601,0203,0201
+ja4one=t12i150700_073e58a039a6_8ebfdaddfa31
+--- no_error_log
+[error]
+
+
+
+=== TEST 21: raw_and_ja4one_can_be_read_before_ja4
+# Read the raw and JA4one variables first, then repeat them after JA4.
+# SNI/ALPN raise the extension count to 09 but stay out of both hashes.
+# Separate set evaluations invoke the non-cacheable variable handlers again.
+# This checks handler reevaluation and read order; formatted fingerprints
+# remain cached in the module's request context.
+--- config
+    location /t {
+        default_type text/plain;
+        set $raw_first $http_ssl_ja4_string;
+        set $one_first $http_ssl_ja4one;
+        set $ja4_value $http_ssl_ja4;
+        set $raw_again $http_ssl_ja4_string;
+        set $one_again $http_ssl_ja4one;
+        return 200 "raw_first=$raw_first\none_first=$one_first\nja4=$ja4_value\nraw_again=$raw_again\none_again=$one_again\n";
+    }
+--- curl_protocol: https
+--- server_addr_for_client: example.test
+--- curl_options: --utls-hello HelloFirefox_55
+--- request
+GET /t
+--- response_body
+raw_first=t12d1509h2_000a,002f,0033,0035,0039,c009,c00a,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0017,0023,ff01_0403,0503,0603,0804,0805,0806,0401,0501,0601,0203,0201
+one_first=t12d1507h2_073e58a039a6_8ebfdaddfa31
+ja4=t12d1509h2_073e58a039a6_e70312a1ce2c
+raw_again=t12d1509h2_000a,002f,0033,0035,0039,c009,c00a,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0017,0023,ff01_0403,0503,0603,0804,0805,0806,0401,0501,0601,0203,0201
+one_again=t12d1507h2_073e58a039a6_8ebfdaddfa31
+--- no_error_log
+[error]
+
+
+
+=== TEST 22: first_offered_alpn_is_not_the_negotiated_protocol
+# The client offers "h9" first, then "http/1.1". nginx selects http/1.1,
+# while JA4 must retain the first offered value h9 in every representation.
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "negotiated=$ssl_alpn_protocol\nja4=$http_ssl_ja4\nja4_string=$http_ssl_ja4_string\nja4one=$http_ssl_ja4one\n";
+    }
+--- curl_protocol: https
+--- curl_options: --utls-hello HelloFirefox_55 --utls-alpn-hex 6839
+--- request
+GET /t
+--- response_body
+negotiated=http/1.1
+ja4=t12i1508h9_073e58a039a6_e70312a1ce2c
+ja4_string=t12i1508h9_000a,002f,0033,0035,0039,c009,c00a,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0017,0023,ff01_0403,0503,0603,0804,0805,0806,0401,0501,0601,0203,0201
+ja4one=t12i1507h9_073e58a039a6_8ebfdaddfa31
+--- no_error_log
+[error]
+
+
+
+=== TEST 23: highest_offered_tls_version_survives_tls12_negotiation
+# Chrome_133 offers TLS 1.3 and 1.2 plus GREASE. The server only accepts
+# TLS 1.2; JA4 must still report t13 from supported_versions, not t12 from
+# the negotiated protocol or ClientHello legacy_version.
+--- config
+    ssl_protocols TLSv1.2;
+    location /t {
+        default_type text/plain;
+        return 200 "negotiated=$ssl_protocol\nja4=$http_ssl_ja4\nja4_string=$http_ssl_ja4_string\nja4one=$http_ssl_ja4one\n";
+    }
+--- curl_protocol: https
+--- server_addr_for_client: example.test
+--- curl_options: --utls-hello HelloChrome_133
+--- request
+GET /t
+--- response_body
+negotiated=TLSv1.2
+ja4=t13d1516h2_8daaf6152771_d8a2da3f94cd
+ja4_string=t13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601
+ja4one=t13d1514h2_8daaf6152771_1e53c2b25e87
+--- no_error_log
+[error]
