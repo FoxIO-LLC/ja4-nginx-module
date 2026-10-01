@@ -106,18 +106,6 @@ typedef struct ngx_ssl_ja4t_s
     unsigned int window_scale_present; // Flag to indicate if window scale is present
 } ngx_ssl_ja4t_t;
 
-typedef struct ngx_ssl_ja4ts_s
-{
-    unsigned int window_size;  // TCP Window Size
-    u_char tcp_options[40];    // TCP Options (max 40 bytes as a safe upper limit)
-    unsigned int mss_value;    // MSS Value
-    unsigned int window_scale; // Window Scale
-
-    unsigned int synack_retrans_count;   // Count of SYNACK TCP retransmissions
-    unsigned int synack_time_delays[10]; // Time delays between each retransmission, max 10
-    unsigned int rst_flag;               // Flag to indicate if RST is sent
-} ngx_ssl_ja4ts_t;
-
 typedef struct ngx_ssl_ja4x_s
 {
     char issuer_rdns_hash[13];  // 12 characters for truncated sha256 hash of Issuer RDNs + null terminator
@@ -418,11 +406,7 @@ static ngx_int_t ngx_http_ssl_ja4h_string(ngx_http_request_t *r, ngx_http_variab
 static ngx_int_t ngx_http_ssl_ja4t(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
 
 // JA4TS
-int ngx_ssl_ja4ts(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4ts_t *ja4ts);
-void ngx_ssl_ja4ts_fp(ngx_pool_t *pool, ngx_ssl_ja4ts_t *ja4ts, ngx_str_t *out);
-static ngx_int_t ngx_http_ssl_ja4ts(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
-void ngx_ssl_ja4ts_fp_string(ngx_pool_t *pool, ngx_ssl_ja4ts_t *ja4ts, ngx_str_t *out);
-static ngx_int_t ngx_http_ssl_ja4ts_string(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
+static ngx_int_t ngx_http_upstream_ja4ts(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
 
 // JA4X
 int ngx_ssl_ja4x(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4x_t *ja4x);
