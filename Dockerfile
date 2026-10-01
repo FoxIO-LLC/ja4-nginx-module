@@ -51,7 +51,7 @@ RUN wget https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz && \
 COPY . /tmp/ja4-nginx-module
 WORKDIR /tmp/nginx-${NGINX_VERSION}
 RUN patch -p1 < /tmp/ja4-nginx-module/patches/nginx-tcp-save-syn.patch && \
-    patch -p1 < /tmp/ja4-nginx-module/patches/nginx.patch
+    patch -p1 < /tmp/ja4-nginx-module/patches/nginx-ssl-save-client-hello.patch
 
 # OpenSSL is static (no-shared), so the binary has no runtime dependency
 # on /opt/openssl.

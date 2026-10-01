@@ -103,7 +103,7 @@ jobs:
           fi
           patch -p1 -d "${nginx_src}" < "${no_pool}"
           patch -p1 -d "${nginx_src}" \
-            < "${GITHUB_WORKSPACE}/patches/nginx.patch"
+            < "${GITHUB_WORKSPACE}/patches/nginx-ssl-save-client-hello.patch"
           patch -p1 -d "${nginx_src}" \
             < "${GITHUB_WORKSPACE}/patches/nginx-tcp-save-syn.patch"
 
