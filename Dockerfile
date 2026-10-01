@@ -45,6 +45,7 @@ WORKDIR /tmp/nginx-${NGINX_VERSION}
 RUN patch -p1 < /tmp/ja4-nginx-module/patches/nginx-tcp-save-syn.patch
 RUN ./configure \
       --with-openssl=/tmp/openssl-${OPENSSL_VERSION} \
+      --with-openssl-opt="no-tests no-docs" \
       --with-debug --with-compat \
       --add-module=/tmp/ja4-nginx-module \
       --with-http_ssl_module \
@@ -61,14 +62,10 @@ ARG OPENSSL_VERSION=4.0.0
 
 WORKDIR /tmp
 
-# Copy sources from build cache
+# Copy sources from build cache. nginx links the OpenSSL that its build
+# installed into .openssl, so the rest of the OpenSSL tree is not needed.
 COPY --from=build-cache /tmp/nginx-${NGINX_VERSION} /tmp/nginx-${NGINX_VERSION}
-COPY --from=build-cache /tmp/openssl-${OPENSSL_VERSION} /tmp/openssl-${OPENSSL_VERSION}
-
-# Rebuild only what's changed in the OpenSSL
-WORKDIR /tmp/openssl-${OPENSSL_VERSION}
-RUN make -j$(nproc) && \
-    make install_sw LIBDIR=lib
+COPY --from=build-cache /tmp/openssl-${OPENSSL_VERSION}/.openssl /tmp/openssl-${OPENSSL_VERSION}/.openssl
 
 # Patch nginx
 COPY . /tmp/ja4-nginx-module
