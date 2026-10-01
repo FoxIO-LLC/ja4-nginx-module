@@ -34,8 +34,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # mode=max also caches the build-cache stage, which compiles OpenSSL
-      # and nginx, so later runs only rebuild the final stage.
+      # mode=max also caches the openssl stage, so later runs only compile
+      # nginx and the module.
       - name: Build nginx image
         uses: docker/build-push-action@v6
         with:
