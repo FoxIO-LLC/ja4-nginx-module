@@ -21,6 +21,8 @@
 #   TESTs 22-23 offered ALPN/TLS values versus negotiated values
 # These use existing curlu flags; arbitrary extension IDs are not injectable.
 #
+# TEST 24 sends a ClientHello with no extensions (curlu --utls-ext-none).
+#
 # Run:
 #   export TEST_NGINX_BINARY=/path/to/nginx
 #   export PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}
@@ -569,5 +571,29 @@ negotiated=TLSv1.2
 ja4=t13d1516h2_8daaf6152771_d8a2da3f94cd
 ja4_string=t13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601
 ja4one=t13d1514h2_8daaf6152771_1e53c2b25e87
+--- no_error_log
+[error]
+
+
+
+=== TEST 24: client_hello_without_extensions
+# Firefox_55's ciphers in a TLS 1.2 hello with no extension block. Without
+# supported_groups or signature_algorithms only RSA key exchange (002f) can
+# complete, and OpenSSL 3 needs SECLEVEL=0 to accept the implied SHA-1.
+# Counts are 00, ALPN is 00, and both extension hashes are zeros.
+--- config
+    ssl_ciphers "DEFAULT:@SECLEVEL=0";
+    location /t {
+        default_type text/plain;
+        return 200 "ja4=$http_ssl_ja4\nja4_string=$http_ssl_ja4_string\nja4one=$http_ssl_ja4one\n";
+    }
+--- curl_protocol: https
+--- curl_options: --utls-hello HelloFirefox_55 --utls-ext-none
+--- request
+GET /t
+--- response_body
+ja4=t12i150000_073e58a039a6_000000000000
+ja4_string=t12i150000_000a,002f,0033,0035,0039,c009,c00a,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_
+ja4one=t12i150000_073e58a039a6_000000000000
 --- no_error_log
 [error]

@@ -24,7 +24,7 @@ jobs:
 
     env:
       NGINX_VERSION: "1.31.4"
-      CURLU_VERSION: "1.1.1"
+      CURLU_VERSION: "1.2.0"
       BUILD_DIR: /tmp/build
       CC: ${{ matrix.cc }}
       ASAN_OPTIONS: detect_leaks=0
