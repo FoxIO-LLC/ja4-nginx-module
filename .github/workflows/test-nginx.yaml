@@ -51,6 +51,17 @@ jobs:
             nftables
           sudo cpanm --notest Test::Nginx
 
+      # Ubuntu's apt curl lacks HTTP/3; the snap build has it.
+      - name: Install curl with HTTP/3
+        run: |
+          set -euo pipefail
+          sudo snap install curl
+          # Silence the snap sandbox caution curl prints on every run.
+          /snap/bin/curl.snap-acked
+          /snap/bin/curl -V
+          /snap/bin/curl -V | grep -Eq '^Features:.*\bHTTP3\b' \
+            || { echo "::error::snap curl lacks HTTP3"; exit 1; }
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -109,6 +120,7 @@ jobs:
             --add-module="${GITHUB_WORKSPACE}" \
             --with-http_ssl_module \
             --with-http_v2_module \
+            --with-http_v3_module \
             || { echo "::error::nginx configure failed"; cat objs/autoconf.err; exit 1; }
           sed -i \
             -e "s|^CFLAGS *=|CFLAGS = ${{ matrix.cc_sanitize }} |" \
@@ -124,7 +136,14 @@ jobs:
         run: |
           set -euo pipefail
           export TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx"
-          prove -v $(ls test/*.t | grep -Ev '/(ja4t|tls-ja4)-variables\.t$')
+          prove -v $(ls test/*.t | grep -Ev '/(ja4t|tls-ja4|http3-ja4)-variables\.t$')
+
+      - name: Run HTTP/3 JA4 tests (snap curl)
+        run: |
+          set -euo pipefail
+          export PATH="/snap/bin:${PATH}"
+          export TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx"
+          prove -v test/http3-ja4-variables.t
 
       - name: Run TLS JA4 tests (curlu)
         run: |
