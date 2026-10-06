@@ -823,10 +823,7 @@ void ngx_ssl_ja4one_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     size_t cur = 0;
 
     // q for QUIC or t for TCP
-    // Assuming is_quic is a boolean.
-    // out->data[cur++] = (ja4->is_quic) ? 'q' : 't';
-    // TODO: placeholder
-    out->data[cur++] = 't';
+    out->data[cur++] = ja4->transport;
 
     // 2 character TLS version
     memcpy(out->data + cur, ja4->version, 2);
