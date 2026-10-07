@@ -1,4 +1,4 @@
-module ja4-nginx-module/test/utls
+module ja4-nginx-module/test/pytest/utls
 
 go 1.24
 

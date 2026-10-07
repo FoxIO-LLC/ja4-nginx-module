@@ -15,17 +15,17 @@
 #       PATH="/path/to/curlu:$PATH" \
 #       PERL5LIB="$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}" \
 #       TEST_NGINX_BINARY=/path/to/nginx \
-#       prove -v test/ja4t-variables.t
+#       prove -v test/test-nginx/ja4t-variables.t
 
 use File::Spec;
 use Test::More;
 
 BEGIN {
-    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/servroot');
+    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/test-nginx/servroot');
     my $help = `curl --help 2>&1`;
     plan skip_all => 'curlu not on PATH (curl --help has no --ja4t)'
         unless defined $help && $help =~ /--ja4t/;
-    plan skip_all => '--ja4t requires root (sudo -E env PATH=... PERL5LIB=... prove -v test/ja4t-variables.t)'
+    plan skip_all => '--ja4t requires root (sudo -E env PATH=... PERL5LIB=... prove -v test/test-nginx/ja4t-variables.t)'
         unless $> == 0;
 }
 

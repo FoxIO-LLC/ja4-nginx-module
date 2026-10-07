@@ -97,7 +97,7 @@ Run both suites from the repository root. The [CI workflows](.github/workflows) 
 
 ### Test::Nginx
 
-The Perl suite (`test/*.t`) checks module loading, variable behavior on plain HTTP, JA4H request fingerprints, TLS ClientHello cases and JA4T SYN fingerprints.
+The Perl suite (`test/test-nginx/*.t`) checks module loading, variable behavior on plain HTTP, JA4H request fingerprints, TLS ClientHello cases and JA4T SYN fingerprints.
 
 Use nginx built with both patches and HTTP/2 support. Install [Test::Nginx](https://github.com/openresty/test-nginx) with `cpanm`, and build [curlu](https://github.com/lynch1981/curlu) with Go 1.24.0 using the curlu version pinned in [CI](.github/workflows/test-nginx.yaml). Its `curl` wrapper must be on `PATH` for the TLS and JA4T cases.
 
@@ -106,19 +106,19 @@ cpanm --local-lib="$HOME/perl5" Test::Nginx
 export PERL5LIB="$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}"
 export TEST_NGINX_BINARY=/path/to/nginx/objs/nginx
 export PATH="/path/to/curlu:$PATH"
-prove -v test/*.t
+prove -v test/test-nginx/*.t
 ```
 
 JA4T tests need Linux, root, `ip` and `nft`; they are skipped without root or curlu. Run them with:
 
 ```bash
 sudo -E env PATH="$PATH" PERL5LIB="$PERL5LIB" \
-    TEST_NGINX_BINARY="$TEST_NGINX_BINARY" prove -v test/ja4t-variables.t
+    TEST_NGINX_BINARY="$TEST_NGINX_BINARY" prove -v test/test-nginx/ja4t-variables.t
 ```
 
 ### pytest integration tests
 
-The Python suite checks TLS fingerprints, ClientHello edge cases and JA4H against golden files in `test/testdata/`, using containerized curl, Go/uTLS and `curl_cffi` clients.
+The Python suite checks TLS fingerprints, ClientHello edge cases and JA4H against golden files in `test/pytest/testdata/`, using containerized curl, Go/uTLS and `curl_cffi` clients.
 
 Start the Quick start environment first. With Python 3, Go 1.24+ and Docker host networking available, run these commands in a Python virtual environment:
 

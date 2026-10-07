@@ -136,21 +136,21 @@ jobs:
         run: |
           set -euo pipefail
           export TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx"
-          prove -v $(ls test/*.t | grep -Ev '/(ja4t|tls-ja4|http3-ja4)-variables\.t$')
+          prove -v $(ls test/test-nginx/*.t | grep -Ev '/(ja4t|tls-ja4|http3-ja4)-variables\.t$')
 
       - name: Run HTTP/3 JA4 tests (snap curl)
         run: |
           set -euo pipefail
           export PATH="/snap/bin:${PATH}"
           export TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx"
-          prove -v test/http3-ja4-variables.t
+          prove -v test/test-nginx/http3-ja4-variables.t
 
       - name: Run TLS JA4 tests (curlu)
         run: |
           set -euo pipefail
           export PATH="${BUILD_DIR}/curlu-${CURLU_VERSION}:${PATH}"
           export TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx"
-          prove -v test/tls-ja4-variables.t
+          prove -v test/test-nginx/tls-ja4-variables.t
 
       # Run last: curlu crafts SYN packets using root-only network operations.
       - name: Run JA4T tests (root)
@@ -162,4 +162,4 @@ jobs:
             TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx" \
             ASAN_OPTIONS="${ASAN_OPTIONS}" \
             HWASAN_OPTIONS="${HWASAN_OPTIONS}" \
-            prove -v test/ja4t-variables.t
+            prove -v test/test-nginx/ja4t-variables.t

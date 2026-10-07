@@ -4,11 +4,11 @@
 # Client: Test::Nginx HTTP/2 curl path. The `curl` on PATH must be
 # curlu's bash curl wrapper (needs --utls-alpn-hex / --utls-alpn-none / --resolve).
 # Requires nginx with http_ssl_module + http_v2_module, and
-# test/certs/server.{crt,key}. SNI cases
+# test/test-nginx/certs/server.{crt,key}. SNI cases
 # use --resolve so the URL host is example.test (JA4 'd') while TCP stays on
 # 127.0.0.1.
 #
-# Python coverage (test/test_alpn.py, test/test_integration.py):
+# Python coverage (test/pytest/test_alpn.py, test/pytest/test_integration.py):
 #   TESTs 6-7  invalid_cipher_count / scsv_inclusion
 #   TEST 8     ech_alps (HelloChrome_133 analogue of chrome136 goldens)
 #   TESTs 9-14 test_alpn.py encodings 00/hh/60/28/20/2d
@@ -24,11 +24,11 @@
 # Run:
 #   export TEST_NGINX_BINARY=/path/to/nginx
 #   export PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}
-#   prove -v test/tls-ja4-variables.t
+#   prove -v test/test-nginx/tls-ja4-variables.t
 
 BEGIN {
     use File::Spec;
-    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/servroot');
+    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/test-nginx/servroot');
     $ENV{TEST_NGINX_USE_HTTP2} = 1;
 }
 
@@ -41,8 +41,8 @@ no_root_location();
 $ENV{TEST_NGINX_SSL_PORT} ||= server_port() + 10;
 server_port_for_client($ENV{TEST_NGINX_SSL_PORT});
 
-my $crt = File::Spec->rel2abs('test/certs/server.crt');
-my $key = File::Spec->rel2abs('test/certs/server.key');
+my $crt = File::Spec->rel2abs('test/test-nginx/certs/server.crt');
+my $key = File::Spec->rel2abs('test/test-nginx/certs/server.key');
 my $ssl_port = $ENV{TEST_NGINX_SSL_PORT};
 
 add_block_preprocessor(sub {
