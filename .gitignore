@@ -13,4 +13,4 @@ __pycache__/
 .pytest_cache/
 
 # Test::Nginx runtime tree
-test/servroot/
+test/test-nginx/servroot/

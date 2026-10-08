@@ -6,13 +6,13 @@
 #
 #   PERL5LIB="$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}" \
 #   TEST_NGINX_BINARY=/path/to/nginx \
-#       prove -v test/ja4t-mptcp.t
+#       prove -v test/test-nginx/ja4t-mptcp.t
 
 use File::Spec;
 use Test::More;
 
 BEGIN {
-    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/servroot');
+    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/test-nginx/servroot');
     my $mptcp = `sysctl -n net.mptcp.enabled 2>/dev/null`;
     plan skip_all => 'MPTCP disabled (net.mptcp.enabled != 1)'
         unless defined $mptcp && $mptcp =~ /^1$/m;

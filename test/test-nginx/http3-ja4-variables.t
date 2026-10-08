@@ -3,7 +3,7 @@
 #
 # Client: Test::Nginx runs `curl --http3-only -k` for --- http3 blocks, so the
 # `curl` on PATH must support HTTP/3 (`curl -V` lists HTTP3). Requires nginx
-# with http_ssl_module + http_v3_module and test/certs/server.{crt,key}.
+# with http_ssl_module + http_v3_module and test/test-nginx/certs/server.{crt,key}.
 #
 # The ClientHello comes from curl's QUIC stack (ngtcp2 + its TLS library), so
 # exact hashes change with those versions. These cases pin what does not:
@@ -13,12 +13,12 @@
 # Run:
 #   export TEST_NGINX_BINARY=/path/to/nginx
 #   export PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}
-#   PATH=/path/to/curl-with-http3/bin:$PATH prove -v test/http3-ja4-variables.t
+#   PATH=/path/to/curl-with-http3/bin:$PATH prove -v test/test-nginx/http3-ja4-variables.t
 
 BEGIN {
     use File::Spec;
     use Test::More;
-    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/servroot');
+    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/test-nginx/servroot');
     plan skip_all => 'curl on PATH has no HTTP/3 support (curl -V lacks HTTP3)'
         unless `curl -V 2>&1` =~ /^Features:.*\bHTTP3\b/m;
 }
@@ -27,8 +27,8 @@ use Test::Nginx::Socket 'no_plan';
 
 no_root_location();
 
-my $crt = File::Spec->rel2abs('test/certs/server.crt');
-my $key = File::Spec->rel2abs('test/certs/server.key');
+my $crt = File::Spec->rel2abs('test/test-nginx/certs/server.crt');
+my $key = File::Spec->rel2abs('test/test-nginx/certs/server.key');
 
 add_block_preprocessor(sub {
     my $block = shift;

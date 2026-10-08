@@ -7,11 +7,11 @@
 # No crafted SYN packets needed.
 #
 # Run with TEST_NGINX_BINARY pointing to nginx and PERL5LIB set as needed:
-#   prove -v test/cache-variables.t
+#   prove -v test/test-nginx/cache-variables.t
 
 BEGIN {
     use File::Spec;
-    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/servroot');
+    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/test-nginx/servroot');
 }
 
 use Test::Nginx::Socket 'no_plan';
