@@ -120,6 +120,18 @@ ngx_ssl_ja4_write_alpn_code(u_char *dst, const char *alpn)
     dst[1] = hex[last & 0x0F];
 }
 
+// JA4 cipher and extension counts are two digits, capped at 99
+static void
+ngx_ssl_ja4_write_count(u_char *dst, size_t count)
+{
+    if (count > 99) {
+        count = 99;
+    }
+
+    dst[0] = (u_char) ('0' + count / 10);
+    dst[1] = (u_char) ('0' + count % 10);
+}
+
 // JA4
 int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 {
@@ -519,15 +531,11 @@ void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     out->data[cur++] = ja4->has_sni;
 
     // 2 character count of ciphers
-    size_t ciphers_sz = ja4->ciphers_sz;
-    if (ciphers_sz > 99) {
-        ciphers_sz = 99;
-    }
-    ngx_snprintf (out->data + cur, 3, "%02d", ciphers_sz);
+    ngx_ssl_ja4_write_count(out->data + cur, ja4->ciphers_sz);
     cur += 2;
 
     // 2 character count of extensions
-    ngx_snprintf (out->data + cur, 3, "%02d", ja4->extensions_count);
+    ngx_ssl_ja4_write_count(out->data + cur, ja4->extensions_count);
     cur += 2;
 
     // Add ALPN first/last value per JA4 spec
@@ -640,22 +648,11 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     out->data[cur++] = ja4->has_sni;
 
     // 2 character count of ciphers
-    size_t ciphers_sz = ja4->ciphers_sz;
-    if (ciphers_sz == 0)
-    {
-        ngx_snprintf(out->data + cur, 3, "00");
-    }
-    else
-    {
-        if (ciphers_sz > 99) {
-            ciphers_sz = 99;
-        }
-        ngx_snprintf(out->data + cur, 3, "%02zu", ciphers_sz);
-    }
+    ngx_ssl_ja4_write_count(out->data + cur, ja4->ciphers_sz);
     cur += 2;
 
     // 2 character count of extensions
-    ngx_snprintf (out->data + cur, 3, "%02d", ja4->extensions_count);
+    ngx_ssl_ja4_write_count(out->data + cur, ja4->extensions_count);
     cur += 2;
 
     // Add 2 characters for the ALPN ja4->alpn_first_value
@@ -767,22 +764,11 @@ void ngx_ssl_ja4one_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     out->data[cur++] = ja4->has_sni;
 
     // 2 character count of ciphers
-    size_t ciphers_sz = ja4->ciphers_sz;
-    if (ciphers_sz == 0)
-    {
-        ngx_snprintf(out->data + cur, 3, "00");
-    }
-    else
-    {
-        if (ciphers_sz > 99) {
-            ciphers_sz = 99;
-        }
-        ngx_snprintf(out->data + cur, 3, "%02zu", ciphers_sz);
-    }
+    ngx_ssl_ja4_write_count(out->data + cur, ja4->ciphers_sz);
     cur += 2;
 
     // 2 character count of extensions
-    ngx_snprintf(out->data + cur, 3, "%02d", ja4->extensions_no_psk_count);
+    ngx_ssl_ja4_write_count(out->data + cur, ja4->extensions_no_psk_count);
     cur += 2;
 
     // Add ALPN first/last value per JA4 spec
