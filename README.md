@@ -2,7 +2,7 @@
 
 An nginx module exposing JA4+ fingerprints as nginx variables for logging and request handling.
 
-The module requires rebuilding nginx with [patches/nginx.patch](patches/nginx.patch), which captures TLS ClientHello information. JA4T additionally requires the [SYN capture patch](patches/nginx-tcp-save-syn.patch).
+The module requires rebuilding nginx with the [ClientHello capture patch](patches/nginx-ssl-save-client-hello.patch), which saves the raw TLS ClientHello for the module to parse. The patch applies to nginx 1.26 and later. JA4T additionally requires the [SYN capture patch](patches/nginx-tcp-save-syn.patch).
 
 ## Supported fingerprints
 
@@ -46,7 +46,7 @@ Starting from this repository's root, apply the patches to the nginx source tree
 ```bash
 ja4_module_dir="$(pwd)"
 cd /path/to/nginx-source
-patch -p1 < "$ja4_module_dir/patches/nginx.patch"
+patch -p1 < "$ja4_module_dir/patches/nginx-ssl-save-client-hello.patch"
 # Optional: include this patch if you need JA4T.
 patch -p1 < "$ja4_module_dir/patches/nginx-tcp-save-syn.patch"
 ./configure --add-module="$ja4_module_dir" \

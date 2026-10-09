@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include "ngx_http_ssl_ja4_module.h"
 #include "ngx_http_ja4t.h"
+#include "ngx_ssl_ja4_client_hello.h"
 
 static void ngx_ssl_ja4h_fp(ngx_pool_t *pool, ngx_ssl_ja4h_t *ja4h,
     ngx_str_t *out);
@@ -123,8 +124,8 @@ ngx_ssl_ja4_write_alpn_code(u_char *dst, const char *alpn)
 int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 {
     SSL *ssl;
-    size_t i, j;
-    size_t len = 0;
+    size_t i;
+    ngx_ssl_ja4_client_hello_t ch;
 
     if (!c->ssl) {
         return NGX_DECLINED;
@@ -138,19 +139,28 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     if (!ssl) {
         return NGX_DECLINED;
     }
+
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, c->log, 0, "ja4: computing fingerprint");
+
 #if (NGX_QUIC || NGX_COMPAT)
     ja4->transport = (c->quic) ? 'q' : 't';
 #else
     ja4->transport = 't';
 #endif
     ja4->has_sni = SSL_get_servername (ssl, TLSEXT_NAMETYPE_host_name) ? 'd' : 'i';
-    ja4->alpn_first_value = c->ssl->first_alpn;
+
+    /* without a parsed ClientHello the fingerprint is unavailable */
+    if (ngx_ssl_ja4_client_hello(c, pool, &ch) != NGX_OK) {
+        return NGX_DECLINED;
+    }
+
+    ja4->alpn_first_value = ch.first_alpn;
 
 
     /* SSLVersion*/
 
     int client_version_int = SSL_client_version(ssl);
-    int max_version_int = c->ssl->highest_supported_tls_client_version;
+    int max_version_int = ch.version;
     int version_int = 0;
 
     version_int = (max_version_int) ? max_version_int : client_version_int;
@@ -277,27 +287,27 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
     ja4->extensions_no_psk = NULL;
     ja4->extensions_no_psk_count = 0;
 
-    if (c->ssl->extensions_sz && c->ssl->extensions)
+    if (ch.extensions_sz && ch.extensions)
     {
-        ja4->extensions = ngx_pnalloc (pool, c->ssl->extensions_sz * sizeof(char*));
-        ja4->extensions_no_psk = ngx_pnalloc (pool, c->ssl->extensions_sz * sizeof(char*));
+        ja4->extensions = ngx_pnalloc (pool, ch.extensions_sz * sizeof(char*));
+        ja4->extensions_no_psk = ngx_pnalloc (pool, ch.extensions_sz * sizeof(char*));
         if (ja4->extensions == NULL || ja4->extensions_no_psk == NULL) {
             return NGX_ERROR;
         }
 
-        for (i = 0; i < c->ssl->extensions_sz; ++i) {
+        for (i = 0; i < ch.extensions_sz; ++i) {
 
-            if (ngx_ssl_ja4_is_ext_greased (c->ssl->extensions[i])) {
+            if (ngx_ssl_ja4_is_ext_greased (ch.extensions[i])) {
                 continue;
             }
 
-            char *ext = (char *)c->ssl->extensions[i];
+            char *ext = (char *)ch.extensions[i];
             size_t ext_len = strlen (ext) + 1;
 
             ja4->extensions_count++;
 
             // ignored extensions are only counted, not hashed
-            if (ngx_ssl_ja4_is_ext_ignored(c->ssl->extensions[i])) {
+            if (ngx_ssl_ja4_is_ext_ignored(ch.extensions[i])) {
                 continue;
             }
 
@@ -313,7 +323,7 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
             // for no psk ignored extensions are not counted, not hashed
 
             // check if the extension is not a PSK extension
-            if (ngx_ssl_ja4_is_ext_dynamic(c->ssl->extensions[i])) {
+            if (ngx_ssl_ja4_is_ext_dynamic(ch.extensions[i])) {
                 continue;
             }
 
@@ -336,12 +346,14 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 
     int num_sigalgs = SSL_get_sigalgs (ssl, 0, NULL, NULL, NULL, NULL, NULL);
 
-    if (num_sigalgs > -1) {
+    ja4->sigalgs = NULL;
+    ja4->sigalgs_sz = 0;
 
-        char **sigalgs_hex_strings = ngx_pnalloc(c->pool, num_sigalgs * sizeof(char *));
-        if (sigalgs_hex_strings == NULL) {
-            ngx_log_error(NGX_LOG_ERR, c->log, -1, "Failed to allocate memory.");
-            return NGX_ERROR;
+    if (num_sigalgs > 0) {
+
+        ja4->sigalgs = ngx_pnalloc(pool, num_sigalgs * sizeof(char *));
+        if (ja4->sigalgs == NULL) {
+            return NGX_DECLINED;
         }
 
         for (int i = 0; i < num_sigalgs; ++i) {
@@ -350,61 +362,20 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
             unsigned char rsig, rhash;
             SSL_get_sigalgs (ssl, i, &psign, &phash, &psignhash, &rsig, &rhash);
 
-            char hex_string[5];
-            ngx_sprintf ((u_char *)&hex_string[0],  "%02xd%02xd", rhash, rsig);
-            hex_string[4] = '\0';
-
-            sigalgs_hex_strings[i] = ngx_pnalloc(c->pool, sizeof(hex_string));
-            if (sigalgs_hex_strings[i] == NULL) {
-                ngx_log_error (NGX_LOG_ERR, c->log, -1, "Failed to allocate memory");
-                return NGX_ERROR;
-            }
-
-            ngx_memcpy (sigalgs_hex_strings[i], hex_string, sizeof(hex_string));
-        }
-
-        c->ssl->sigalgs_hash_values = sigalgs_hex_strings;
-    }
-
-    c->ssl->sigalgs_sz = num_sigalgs;
-
-    // signature algorithms
-    ja4->sigalgs = NULL;
-    ja4->sigalgs_sz = 0;
-
-    if (c->ssl->sigalgs_sz && c->ssl->sigalgs_hash_values)
-    {
-        len = c->ssl->sigalgs_sz * sizeof(char *);
-        ja4->sigalgs = ngx_pnalloc(pool, len);
-        if (ja4->sigalgs == NULL)
-        {
-            return NGX_DECLINED;
-        }
-        for (i = 0; i < c->ssl->sigalgs_sz; ++i)
-        {
-            size_t sigalg_len = strlen(c->ssl->sigalgs_hash_values[i]) + 1; // +1 for null terminator
-
-            // Allocate memory for the signature algorithm string and copy it
-            ja4->sigalgs[ja4->sigalgs_sz] = ngx_pnalloc(pool, sigalg_len);
-            if (ja4->sigalgs[ja4->sigalgs_sz] == NULL)
-            {
-                // Handle allocation failure and clean up previously allocated memory
-                for (j = 0; j < ja4->sigalgs_sz; j++)
-                {
-                    ngx_pfree(pool, ja4->sigalgs[j]);
-                }
-                ngx_pfree(pool, ja4->sigalgs);
-                ja4->sigalgs = NULL;
+            ja4->sigalgs[i] = ngx_pnalloc(pool, sizeof("0000"));
+            if (ja4->sigalgs[i] == NULL) {
                 return NGX_DECLINED;
             }
-            ngx_memcpy (ja4->sigalgs[ja4->sigalgs_sz], c->ssl->sigalgs_hash_values[i], sigalg_len);
-            ja4->sigalgs_sz++;
+
+            *ngx_sprintf((u_char *) ja4->sigalgs[i], "%02xd%02xd", rhash, rsig) = '\0';
         }
+
+        ja4->sigalgs_sz = num_sigalgs;
     }
 
 #if (NGX_DEBUG)
     ngx_log_debug1 (NGX_LOG_DEBUG_EVENT, c->log, 0, "ja4: sigalgs (%d): ", ja4->sigalgs_sz);
-    for (int i = 0; i < (int) c->ssl->sigalgs_sz; i++)
+    for (int i = 0; i < (int) ja4->sigalgs_sz; i++)
         ngx_log_debug2 (NGX_LOG_DEBUG_EVENT, c->log, 0, "-- [%2d]: %s", i, ja4->sigalgs[i]);
 #endif
 
@@ -592,37 +563,18 @@ static ngx_int_t
 ngx_http_ssl_ja4(ngx_http_request_t *r,
                  ngx_http_variable_value_t *v, uintptr_t data)
 {
-    ngx_http_ssl_ja4_ctx_t *ctx;
-    ngx_ssl_ja4_t ja4;
+    ngx_ssl_ja4_cache_t  *cache;
 
-    if (r->connection == NULL) {
-        return NGX_OK;
-    }
-
-    if (ngx_ssl_ja4(r->connection, r->pool, &ja4) == NGX_DECLINED) {
+    cache = ngx_http_ssl_ja4_cache(r);
+    if (cache == NULL) {
         return NGX_ERROR;
     }
 
-    ctx = ngx_get_or_create_ja4_ctx (r);
-    if (ctx == NULL) {
-        return NGX_ERROR;
-    }
-
-    if (ctx->ja4.len == 0) {
-
-        ngx_str_t fp = ngx_null_string;
-
-        ngx_ssl_ja4_fp(r->pool, &ja4, &fp);
-        ctx->ja4.len = fp.len;
-        ctx->ja4.data = ngx_pnalloc(r->pool, fp.len);
-
-        ngx_memcpy(ctx->ja4.data, fp.data, fp.len);
-    }
-
-    v->data = ctx->ja4.data;
-    v->len = ctx->ja4.len;
+    /* cacheable: nginx keeps the value for the rest of the request */
+    v->data = cache->ja4.data;
+    v->len = cache->ja4.len;
     v->valid = 1;
-    v->no_cacheable = 1;
+    v->no_cacheable = 0;
     v->not_found = 0;
 
     return NGX_OK;
@@ -769,36 +721,18 @@ static ngx_int_t
 ngx_http_ssl_ja4_string(ngx_http_request_t *r,
                         ngx_http_variable_value_t *v, uintptr_t data)
 {
-    ngx_http_ssl_ja4_ctx_t *ctx;
-    ngx_ssl_ja4_t ja4;
+    ngx_ssl_ja4_cache_t  *cache;
 
-    if (r->connection == NULL)
-    {
-        return NGX_OK;
-    }
-
-    if (ngx_ssl_ja4(r->connection, r->pool, &ja4) == NGX_DECLINED)
-    {
+    cache = ngx_http_ssl_ja4_cache(r);
+    if (cache == NULL) {
         return NGX_ERROR;
     }
 
-    ctx = ngx_get_or_create_ja4_ctx (r);
-    if (ctx == NULL) {
-        return NGX_ERROR;
-    }
-
-    if (ctx->ja4_string.len == 0) {
-        ngx_str_t fp = ngx_null_string;
-        ngx_ssl_ja4_fp_string(r->pool, &ja4, &fp);
-        ctx->ja4_string.len = fp.len;
-        ctx->ja4_string.data = ngx_pnalloc(r->pool, fp.len);
-        ngx_memcpy(ctx->ja4_string.data, fp.data, fp.len);
-    }
-
-    v->data = ctx->ja4_string.data;
-    v->len = ctx->ja4_string.len;
+    /* cacheable: nginx keeps the value for the rest of the request */
+    v->data = cache->ja4_string.data;
+    v->len = cache->ja4_string.len;
     v->valid = 1;
-    v->no_cacheable = 1;
+    v->no_cacheable = 0;
     v->not_found = 0;
 
     return NGX_OK;
@@ -883,35 +817,18 @@ static ngx_int_t
 ngx_http_ssl_ja4one(ngx_http_request_t *r,
                     ngx_http_variable_value_t *v, uintptr_t data)
 {
-    ngx_http_ssl_ja4_ctx_t *ctx;
-    ngx_ssl_ja4_t ja4;
+    ngx_ssl_ja4_cache_t  *cache;
 
-    if (r->connection == NULL)
-    {
-        return NGX_OK;
-    }
-    if (ngx_ssl_ja4(r->connection, r->pool, &ja4) == NGX_DECLINED)
-    {
+    cache = ngx_http_ssl_ja4_cache(r);
+    if (cache == NULL) {
         return NGX_ERROR;
     }
 
-    ctx = ngx_get_or_create_ja4_ctx (r);
-    if (ctx == NULL) {
-        return NGX_ERROR;
-    }
-
-    if (ctx->ja4one.len == 0) {
-        ngx_str_t fp = ngx_null_string;
-        ngx_ssl_ja4one_fp(r->pool, &ja4, &fp);
-        ctx->ja4one.len = fp.len;
-        ctx->ja4one.data = ngx_pnalloc(r->pool, fp.len);
-        ngx_memcpy(ctx->ja4one.data, fp.data, fp.len);
-    }
-
-    v->data = ctx->ja4one.data;
-    v->len = ctx->ja4one.len;
+    /* cacheable: nginx keeps the value for the rest of the request */
+    v->data = cache->ja4one.data;
+    v->len = cache->ja4one.len;
     v->valid = 1;
-    v->no_cacheable = 1;
+    v->no_cacheable = 0;
     v->not_found = 0;
 
     return NGX_OK;
@@ -955,7 +872,7 @@ ngx_http_ssl_ja4s(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4s(r->connection, r->pool, &ja4s) == NGX_DECLINED)
+    if (ngx_ssl_ja4s(r->connection, r->pool, &ja4s) != NGX_OK)
     {
         return NGX_ERROR;
     }
@@ -987,7 +904,7 @@ ngx_http_ssl_ja4s_string(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4s(r->connection, r->pool, &ja4s) == NGX_DECLINED)
+    if (ngx_ssl_ja4s(r->connection, r->pool, &ja4s) != NGX_OK)
     {
         return NGX_ERROR;
     }
@@ -1058,7 +975,7 @@ ngx_http_ssl_ja4x(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4x(r->connection, r->pool, &ja4x) == NGX_DECLINED)
+    if (ngx_ssl_ja4x(r->connection, r->pool, &ja4x) != NGX_OK)
     {
         return NGX_ERROR;
     }
@@ -1088,7 +1005,7 @@ ngx_http_ssl_ja4x_string(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4x(r->connection, r->pool, &ja4x) == NGX_DECLINED)
+    if (ngx_ssl_ja4x(r->connection, r->pool, &ja4x) != NGX_OK)
     {
         return NGX_ERROR;
     }
@@ -1713,7 +1630,7 @@ ngx_http_ssl_ja4ts(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4ts(r->connection, r->pool, &ja4ts) == NGX_DECLINED)
+    if (ngx_ssl_ja4ts(r->connection, r->pool, &ja4ts) != NGX_OK)
     {
         return NGX_ERROR;
     }
@@ -1743,7 +1660,7 @@ ngx_http_ssl_ja4ts_string(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4ts(r->connection, r->pool, &ja4ts) == NGX_DECLINED)
+    if (ngx_ssl_ja4ts(r->connection, r->pool, &ja4ts) != NGX_OK)
     {
         return NGX_ERROR;
     }
@@ -1782,9 +1699,9 @@ int ngx_ssl_ja4l(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4l_t *ja4l)
         return NGX_DECLINED;
     }
 
-    // transfer ssl connection variables to the ja4l struct
-    ja4l->handshake_roundtrip_microseconds = c->ssl->handshake_roundtrip_microseconds;
-    ja4l->ttl = c->ssl->ttl;
+    // not collected yet
+    ja4l->handshake_roundtrip_microseconds = 0;
+    ja4l->ttl = 0;
 
     return NGX_OK;
 }
@@ -1889,7 +1806,7 @@ ngx_http_ssl_ja4l(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4l(r->connection, r->pool, &ja4l) == NGX_DECLINED)
+    if (ngx_ssl_ja4l(r->connection, r->pool, &ja4l) != NGX_OK)
     {
         return NGX_ERROR;
     }
@@ -1907,16 +1824,21 @@ ngx_http_ssl_ja4l(ngx_http_request_t *r,
 
 // HELPERS AND CONFIG
 
+/* SSL ex_data slot for the per-connection JA4 cache; -1 until reserved */
+static int  ngx_ssl_ja4_cache_index = -1;
+
+
 /**
  * ngx_http_ssl_ja4_init - Initialize Nginx variables for JA4.
  *
  * This function initializes Nginx variables so that they can be accessed
  * and used in the Nginx configuration files. It iterates over a predefined
  * list of variables (`ngx_http_ssl_ja4_variables_list`) and registers each
- * variable using the `ngx_http_add_variable` function.
+ * variable using the `ngx_http_add_variable` function. It also reserves the
+ * SSL ex_data slot for the JA4 cache, once per process.
  *
  * @param cf A pointer to the Nginx configuration structure.
- * @return NGX_OK on successful initialization.
+ * @return NGX_OK on success, NGX_ERROR if the slot cannot be reserved.
  */
 static ngx_int_t
 ngx_http_ssl_ja4_init(ngx_conf_t *cf)
@@ -1928,6 +1850,17 @@ ngx_http_ssl_ja4_init(ngx_conf_t *cf)
 
     vars_len = (sizeof(ngx_http_ssl_ja4_variables_list) /
                 sizeof(ngx_http_ssl_ja4_variables_list[0]));
+
+    /* the index survives reloads, so request it only once */
+    if (ngx_ssl_ja4_cache_index == -1) {
+        ngx_ssl_ja4_cache_index = SSL_get_ex_new_index(0, NULL, NULL, NULL,
+                                                       NULL);
+        if (ngx_ssl_ja4_cache_index == -1) {
+            ngx_ssl_error(NGX_LOG_EMERG, cf->log, 0,
+                          "SSL_get_ex_new_index() failed");
+            return NGX_ERROR;
+        }
+    }
 
     /* Register variables */
     for (l = 0; l < vars_len; ++l)
@@ -1975,26 +1908,58 @@ ngx_module_t ngx_http_ssl_ja4_module = {
     NGX_MODULE_V1_PADDING};
 
 
-static ngx_http_ssl_ja4_ctx_t*
-ngx_get_or_create_ja4_ctx (ngx_http_request_t *r)
+/*
+ * Computes JA4, JA4_r and JA4one on first use and keeps them on the SSL
+ * object, which every request on the connection shares, HTTP/2 and HTTP/3
+ * streams included. The strings live in the TLS connection's pool, which
+ * outlives HTTP/3 stream pools.
+ */
+static ngx_ssl_ja4_cache_t *
+ngx_http_ssl_ja4_cache(ngx_http_request_t *r)
 {
-    ngx_http_ssl_ja4_ctx_t *ctx = NULL;
+    ngx_pool_t           *pool;
+    ngx_ssl_ja4_t         ja4;
+    ngx_connection_t     *c, *tls;
+    ngx_ssl_ja4_cache_t  *cache;
 
-    ctx = ngx_http_get_module_ctx(r, ngx_http_ssl_ja4_module);
+    c = r->connection;
 
-    if (ctx == NULL) {
-
-        ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_ssl_ja4_ctx_t));
-
-        if (ctx != NULL) {
-
-            ctx->ja4 = (ngx_str_t){0, NULL};
-            ctx->ja4_string = (ngx_str_t){0, NULL};
-            ctx->ja4one = (ngx_str_t){0, NULL};
-
-            ngx_http_set_ctx (r, ctx, ngx_http_ssl_ja4_module);
-        }
+    if (c == NULL || c->ssl == NULL || c->ssl->connection == NULL) {
+        return NULL;
     }
 
-    return ctx;
+    cache = SSL_get_ex_data(c->ssl->connection, ngx_ssl_ja4_cache_index);
+    if (cache != NULL) {
+        ngx_log_debug0(NGX_LOG_DEBUG_HTTP, c->log, 0, "ja4 cache hit");
+        return cache;
+    }
+
+    /* the request pool holds the intermediate struct */
+    if (ngx_ssl_ja4(c, r->pool, &ja4) != NGX_OK) {
+        return NULL;
+    }
+
+    tls = ngx_ssl_get_connection(c->ssl->connection);
+    pool = tls->pool;
+
+    cache = ngx_palloc(pool, sizeof(ngx_ssl_ja4_cache_t));
+    if (cache == NULL) {
+        return NULL;
+    }
+
+    ngx_ssl_ja4_fp(pool, &ja4, &cache->ja4);
+    ngx_ssl_ja4_fp_string(pool, &ja4, &cache->ja4_string);
+    ngx_ssl_ja4one_fp(pool, &ja4, &cache->ja4one);
+
+    if (cache->ja4.len == 0
+        || cache->ja4_string.len == 0
+        || cache->ja4one.len == 0)
+    {
+        return NULL;
+    }
+
+    /* if storing fails, the next request computes the values again */
+    (void) SSL_set_ex_data(c->ssl->connection, ngx_ssl_ja4_cache_index, cache);
+
+    return cache;
 }

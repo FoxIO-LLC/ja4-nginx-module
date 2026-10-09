@@ -1,0 +1,96 @@
+diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
+index 1f3cbb2..96f4eb8 100644
+--- a/src/event/ngx_event_openssl.c
++++ b/src/event/ngx_event_openssl.c
+@@ -2145,6 +2145,9 @@ ngx_ssl_create_connection(ngx_ssl_t *ssl, ngx_connection_t *c, ngx_uint_t flags)
+ #ifdef SSL_OP_NO_RENEGOTIATION
+         SSL_set_options(sc->connection, SSL_OP_NO_RENEGOTIATION);
+ #endif
++
++        /* ja4: keep the raw ClientHello */
++        SSL_set_msg_callback(sc->connection, ngx_ssl_ja4_msg_callback);
+     }
+ 
+     if (SSL_set_ex_data(sc->connection, ngx_ssl_connection_index, c) == 0) {
+@@ -2158,6 +2161,43 @@ ngx_ssl_create_connection(ngx_ssl_t *ssl, ngx_connection_t *c, ngx_uint_t flags)
+ }
+ 
+ 
++/* ja4: keeps a copy of the first ClientHello, the ja4 module parses it */
++
++void
++ngx_ssl_ja4_msg_callback(int write_p, int version, int content_type,
++    const void *buf, size_t len, ngx_ssl_conn_t *ssl_conn, void *arg)
++{
++    const u_char          *p;
++    ngx_connection_t      *c;
++    ngx_ssl_connection_t  *sc;
++
++    p = buf;
++
++    if (write_p
++        || content_type != SSL3_RT_HANDSHAKE
++        || len < 4
++        || p[0] != SSL3_MT_CLIENT_HELLO)
++    {
++        return;
++    }
++
++    c = ngx_ssl_get_connection(ssl_conn);
++    sc = c->ssl;
++
++    if (sc == NULL || sc->raw_client_hello) {
++        return;
++    }
++
++    sc->raw_client_hello = ngx_pnalloc(c->pool, len);
++    if (sc->raw_client_hello == NULL) {
++        return;
++    }
++
++    ngx_memcpy(sc->raw_client_hello, buf, len);
++    sc->raw_client_hello_len = len;
++}
++
++
+ ngx_ssl_session_t *
+ ngx_ssl_get_session(ngx_connection_t *c)
+ {
+diff --git a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl.h
+index 0107114..51bda0c 100644
+--- a/src/event/ngx_event_openssl.h
++++ b/src/event/ngx_event_openssl.h
+@@ -122,6 +122,10 @@ struct ngx_ssl_connection_s {
+     ngx_buf_t                  *buf;
+     size_t                      buffer_size;
+ 
++    /* ja4: raw ClientHello handshake message */
++    u_char                     *raw_client_hello;
++    size_t                      raw_client_hello_len;
++
+     ngx_connection_handler_pt   handler;
+ 
+     ngx_ssl_session_t          *session;
+@@ -400,6 +404,8 @@ void ngx_ssl_connection_error(ngx_connection_t *c, int sslerr, ngx_err_t err,
+ void ngx_cdecl ngx_ssl_error(ngx_uint_t level, ngx_log_t *log, ngx_err_t err,
+     char *fmt, ...);
+ void ngx_ssl_cleanup_ctx(void *data);
++void ngx_ssl_ja4_msg_callback(int write_p, int version, int content_type,
++    const void *buf, size_t len, ngx_ssl_conn_t *ssl_conn, void *arg);
+ 
+ 
+ extern int  ngx_ssl_connection_index;
+diff --git a/src/event/quic/ngx_event_quic_openssl_compat.c b/src/event/quic/ngx_event_quic_openssl_compat.c
+index dcdaa90..66f4122 100644
+--- a/src/event/quic/ngx_event_quic_openssl_compat.c
++++ b/src/event/quic/ngx_event_quic_openssl_compat.c
+@@ -424,6 +424,9 @@ ngx_quic_compat_message_callback(int write_p, int version, int content_type,
+     enum ssl_encryption_level_t   level;
+ 
+     if (!write_p) {
++        /* ja4: this callback replaced ngx_ssl_ja4_msg_callback() */
++        ngx_ssl_ja4_msg_callback(write_p, version, content_type, buf, len,
++                                 ssl, arg);
+         return;
+     }
+ 
