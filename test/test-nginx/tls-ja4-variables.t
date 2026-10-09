@@ -19,10 +19,11 @@
 #   TESTs 17-19 GREASE lookalikes, all 16 GREASE cipher IDs, and duplicates
 #   TESTs 20-21 exact extension/signature lists, ALPN counts, variable-read order
 #   TESTs 22-23 offered ALPN/TLS values versus negotiated values
-# These use existing curlu flags; arbitrary extension IDs are not injectable.
+# These use existing curlu flags.
 #
 # TEST 24 sends a ClientHello with no extensions (curlu --utls-ext-none).
 # TEST 25 checks that one request computes the fingerprints once.
+# TESTs 26-27 cap extension counts above 99 (curlu --utls-ext-append).
 #
 # Run:
 #   export TEST_NGINX_BINARY=/path/to/nginx
@@ -634,5 +635,55 @@ qr/ja4: computing fingerprint|ja4 cache hit/
 ja4: computing fingerprint
 ja4 cache hit
 ja4 cache hit
+--- no_error_log
+[error]
+
+
+
+=== TEST 26: extension_count_reaches_100
+# HelloChrome_133 plus 84 unassigned extensions: JA4 counts 16 + 84 = 100,
+# capped at 99; JA4one counts 14 + 84 = 98, printed as is.
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "ja4=$http_ssl_ja4\nja4one=$http_ssl_ja4one\n";
+    }
+--- curl_protocol: https
+--- server_addr_for_client: example.test
+--- curl_options eval
+CORE::join ' ', '--utls-hello HelloChrome_133',
+    map { sprintf '--utls-ext-append 0x%04x', 0xfa00 + $_ } 0..83
+--- request
+GET /t
+--- response_body
+ja4=t13d1599h2_8daaf6152771_9f1768f41438
+ja4one=t13d1598h2_8daaf6152771_fa65ee53f062
+--- no_error_log
+[error]
+
+
+
+=== TEST 27: extension_count_above_99_is_capped
+# With 120 unassigned extensions both counts exceed 99 and are capped,
+# while the hashes still cover every extension.
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "ja4=$http_ssl_ja4\nja4_string=$http_ssl_ja4_string\nja4one=$http_ssl_ja4one\n";
+    }
+--- curl_protocol: https
+--- server_addr_for_client: example.test
+--- curl_options eval
+CORE::join ' ', '--utls-hello HelloChrome_133',
+    map { sprintf '--utls-ext-append 0x%04x', 0xfa00 + $_ } 0..119
+--- request
+GET /t
+--- response_body eval
+"ja4=t13d1599h2_8daaf6152771_1a58741aa351\n"
+. "ja4_string=t13d1599h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_"
+. CORE::join(',', qw(0005 000a 000b 000d 0012 0017 001b 0023 002b 002d 0033 44cd),
+    (map { sprintf '%04x', 0xfa00 + $_ } 0..119), qw(fe0d ff01))
+. "_0403,0804,0401,0503,0805,0501,0806,0601\n"
+. "ja4one=t13d1599h2_8daaf6152771_c6bd8854f70e\n"
 --- no_error_log
 [error]
