@@ -16,7 +16,8 @@ RUN apk add --no-cache \
     perl-dev \
     nghttp2-dev \
     nghttp3-dev \
-    linux-headers
+    linux-headers \
+    ccache
 
 RUN adduser -D dswebuser
 
@@ -55,7 +56,12 @@ RUN patch -p1 < /tmp/ja4-nginx-module/patches/nginx-tcp-save-syn.patch && \
 
 # OpenSSL is static (no-shared), so the binary has no runtime dependency
 # on /opt/openssl.
-RUN ./configure \
+# The ccache mount persists across local builds, so editing the module only
+# recompiles its own sources. CI does not keep cache mounts, so it always
+# misses there.
+RUN --mount=type=cache,target=/root/.cache/ccache \
+    ./configure \
+      --with-cc="ccache gcc" \
       --with-cc-opt="-I/opt/openssl/include" \
       --with-ld-opt="-L/opt/openssl/lib" \
       --with-debug --with-compat \
