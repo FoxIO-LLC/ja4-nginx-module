@@ -4,7 +4,8 @@
 #define NGX_SSL_JA4_EXT_ALPN                 0x0010
 #define NGX_SSL_JA4_EXT_SUPPORTED_VERSIONS   0x002b
 
-#define ngx_ssl_ja4_is_grease(v)  (((v) & 0x0f0f) == 0x0a0a)
+#define ngx_ssl_ja4_is_grease(v)                                              \
+    (((v) & 0x0f0f) == 0x0a0a && ((v) >> 8) == ((v) & 0xff))
 
 
 static ngx_int_t ngx_ssl_ja4_skip(const u_char **p, const u_char *end,
