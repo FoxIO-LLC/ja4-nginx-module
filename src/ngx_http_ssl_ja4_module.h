@@ -2,11 +2,12 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 
+/* JA4, JA4_r and JA4one, computed once per TLS connection */
 typedef struct {
     ngx_str_t   ja4;
     ngx_str_t   ja4_string;
     ngx_str_t   ja4one;
-} ngx_http_ssl_ja4_ctx_t;
+} ngx_ssl_ja4_cache_t;
 
 // STRUCTS
 typedef struct ngx_ssl_ja4_s
@@ -386,7 +387,8 @@ ngx_module_t ngx_http_ssl_ja4_module;
 // INIT
 static ngx_int_t ngx_http_ssl_ja4_init(ngx_conf_t *cf);
 
-static ngx_http_ssl_ja4_ctx_t *ngx_get_or_create_ja4_ctx(ngx_http_request_t *r);
+static ngx_ssl_ja4_cache_t *ngx_http_ssl_ja4_cache(ngx_http_request_t *r);
+
 
 // JA4
 int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4);

@@ -4,6 +4,7 @@
 # Client: Test::Nginx runs `curl --http3-only -k` for --- http3 blocks, so the
 # `curl` on PATH must support HTTP/3 (`curl -V` lists HTTP3). Requires nginx
 # with http_ssl_module + http_v3_module and test/test-nginx/certs/server.{crt,key}.
+# TEST 4 also needs --with-debug: it counts debug log lines.
 #
 # The ClientHello comes from curl's QUIC stack (ngtcp2 + its TLS library), so
 # exact hashes change with those versions. These cases pin what does not:
@@ -96,5 +97,33 @@ GET /t
 --- response_body_like chomp
 ^ja4=q13d\d{4}h3_[0-9a-f]{12}_[0-9a-f]{12}
 ja4one=q13d\d{4}h3_[0-9a-f]{12}_[0-9a-f]{12}$
+--- no_error_log
+[error]
+
+
+
+=== TEST 4: one_quic_connection_computes_the_fingerprints_once
+# curl expands {1,2} into two requests on one QUIC connection. Each
+# request logs JA4 into error.log: the first request computes JA4, the
+# second request's stream is a cache hit, and both log the same value.
+--- http_config
+    log_format ja4vals 'ja4vals $http_ssl_ja4';
+--- config
+    location /t {
+        access_log logs/error.log ja4vals;
+        return 200 "ok\n";
+    }
+--- request
+GET /t?r={1,2}
+--- ignore_response
+--- grep_error_log eval
+qr/ja4: computing fingerprint|ja4 cache hit|ja4vals \S+/
+--- grep_error_log_out eval
+qr/\A
+    ja4:\ computing\ fingerprint\n   # request 1 computes JA4
+    ja4vals\ (q13i\S+)\n
+    ja4\ cache\ hit\n                # request 2 reuses it
+    ja4vals\ \1\n                    # with the same value
+\z/x
 --- no_error_log
 [error]

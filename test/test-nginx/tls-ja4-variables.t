@@ -4,9 +4,9 @@
 # Client: Test::Nginx HTTP/2 curl path. The `curl` on PATH must be
 # curlu's bash curl wrapper (needs --utls-alpn-hex / --utls-alpn-none / --resolve).
 # Requires nginx with http_ssl_module + http_v2_module, and
-# test/test-nginx/certs/server.{crt,key}. SNI cases
-# use --resolve so the URL host is example.test (JA4 'd') while TCP stays on
-# 127.0.0.1.
+# test/test-nginx/certs/server.{crt,key}. TEST 25 also needs --with-debug.
+# SNI cases use --resolve so the URL host is example.test (JA4 'd') while
+# TCP stays on 127.0.0.1.
 #
 # Python coverage (test/pytest/test_alpn.py, test/pytest/test_integration.py):
 #   TESTs 6-7  invalid_cipher_count / scsv_inclusion
@@ -22,6 +22,7 @@
 # These use existing curlu flags; arbitrary extension IDs are not injectable.
 #
 # TEST 24 sends a ClientHello with no extensions (curlu --utls-ext-none).
+# TEST 25 checks that one request computes the fingerprints once.
 #
 # Run:
 #   export TEST_NGINX_BINARY=/path/to/nginx
@@ -500,9 +501,8 @@ ja4one=t12i150700_073e58a039a6_8ebfdaddfa31
 === TEST 21: raw_and_ja4one_can_be_read_before_ja4
 # Read the raw and JA4one variables first, then repeat them after JA4.
 # SNI/ALPN raise the extension count to 09 but stay out of both hashes.
-# Separate set evaluations invoke the non-cacheable variable handlers again.
-# This checks handler reevaluation and read order; formatted fingerprints
-# remain cached in the module's request context.
+# The repeated reads return nginx's cached values (see TEST 25); this case
+# checks that the read order does not change any of them.
 --- config
     location /t {
         default_type text/plain;
@@ -595,5 +595,44 @@ GET /t
 ja4=t12i150000_073e58a039a6_000000000000
 ja4_string=t12i150000_000a,002f,0033,0035,0039,c009,c00a,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_
 ja4one=t12i150000_073e58a039a6_000000000000
+--- no_error_log
+[error]
+
+
+
+=== TEST 25: one_request_computes_the_fingerprints_once
+# Each variable is read by two separate set directives. The first read
+# computes all three fingerprints into the connection cache; the first
+# reads of the other two variables are cache hits, and every second read
+# returns nginx's cached variable without calling the handler.
+--- config
+    location /t {
+        default_type text/plain;
+        set $ja4_1 $http_ssl_ja4;
+        set $ja4_2 $http_ssl_ja4;
+        set $raw_1 $http_ssl_ja4_string;
+        set $raw_2 $http_ssl_ja4_string;
+        set $one_1 $http_ssl_ja4one;
+        set $one_2 $http_ssl_ja4one;
+        return 200 "ja4=$ja4_1\nja4=$ja4_2\nraw=$raw_1\nraw=$raw_2\none=$one_1\none=$one_2\n";
+    }
+--- curl_protocol: https
+--- server_addr_for_client: example.test
+--- curl_options: --utls-hello HelloChrome_133
+--- request
+GET /t
+--- response_body
+ja4=t13d1516h2_8daaf6152771_d8a2da3f94cd
+ja4=t13d1516h2_8daaf6152771_d8a2da3f94cd
+raw=t13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601
+raw=t13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0403,0804,0401,0503,0805,0501,0806,0601
+one=t13d1514h2_8daaf6152771_1e53c2b25e87
+one=t13d1514h2_8daaf6152771_1e53c2b25e87
+--- grep_error_log eval
+qr/ja4: computing fingerprint|ja4 cache hit/
+--- grep_error_log_out
+ja4: computing fingerprint
+ja4 cache hit
+ja4 cache hit
 --- no_error_log
 [error]
