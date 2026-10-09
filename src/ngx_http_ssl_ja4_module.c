@@ -146,7 +146,8 @@ int ngx_ssl_ja4(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 #endif
     ja4->has_sni = SSL_get_servername (ssl, TLSEXT_NAMETYPE_host_name) ? 'd' : 'i';
 
-    if (ngx_ssl_ja4_client_hello(c, pool, &ch) == NGX_ERROR) {
+    /* without a parsed ClientHello the fingerprint is unavailable */
+    if (ngx_ssl_ja4_client_hello(c, pool, &ch) != NGX_OK) {
         return NGX_DECLINED;
     }
 
@@ -566,7 +567,7 @@ ngx_http_ssl_ja4(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4(r->connection, r->pool, &ja4) == NGX_DECLINED) {
+    if (ngx_ssl_ja4(r->connection, r->pool, &ja4) != NGX_OK) {
         return NGX_ERROR;
     }
 
@@ -744,7 +745,7 @@ ngx_http_ssl_ja4_string(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4(r->connection, r->pool, &ja4) == NGX_DECLINED)
+    if (ngx_ssl_ja4(r->connection, r->pool, &ja4) != NGX_OK)
     {
         return NGX_ERROR;
     }
@@ -857,7 +858,7 @@ ngx_http_ssl_ja4one(ngx_http_request_t *r,
     {
         return NGX_OK;
     }
-    if (ngx_ssl_ja4(r->connection, r->pool, &ja4) == NGX_DECLINED)
+    if (ngx_ssl_ja4(r->connection, r->pool, &ja4) != NGX_OK)
     {
         return NGX_ERROR;
     }
@@ -922,7 +923,7 @@ ngx_http_ssl_ja4s(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4s(r->connection, r->pool, &ja4s) == NGX_DECLINED)
+    if (ngx_ssl_ja4s(r->connection, r->pool, &ja4s) != NGX_OK)
     {
         return NGX_ERROR;
     }
@@ -954,7 +955,7 @@ ngx_http_ssl_ja4s_string(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4s(r->connection, r->pool, &ja4s) == NGX_DECLINED)
+    if (ngx_ssl_ja4s(r->connection, r->pool, &ja4s) != NGX_OK)
     {
         return NGX_ERROR;
     }
@@ -1025,7 +1026,7 @@ ngx_http_ssl_ja4x(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4x(r->connection, r->pool, &ja4x) == NGX_DECLINED)
+    if (ngx_ssl_ja4x(r->connection, r->pool, &ja4x) != NGX_OK)
     {
         return NGX_ERROR;
     }
@@ -1055,7 +1056,7 @@ ngx_http_ssl_ja4x_string(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4x(r->connection, r->pool, &ja4x) == NGX_DECLINED)
+    if (ngx_ssl_ja4x(r->connection, r->pool, &ja4x) != NGX_OK)
     {
         return NGX_ERROR;
     }
@@ -1680,7 +1681,7 @@ ngx_http_ssl_ja4ts(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4ts(r->connection, r->pool, &ja4ts) == NGX_DECLINED)
+    if (ngx_ssl_ja4ts(r->connection, r->pool, &ja4ts) != NGX_OK)
     {
         return NGX_ERROR;
     }
@@ -1710,7 +1711,7 @@ ngx_http_ssl_ja4ts_string(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4ts(r->connection, r->pool, &ja4ts) == NGX_DECLINED)
+    if (ngx_ssl_ja4ts(r->connection, r->pool, &ja4ts) != NGX_OK)
     {
         return NGX_ERROR;
     }
@@ -1856,7 +1857,7 @@ ngx_http_ssl_ja4l(ngx_http_request_t *r,
         return NGX_OK;
     }
 
-    if (ngx_ssl_ja4l(r->connection, r->pool, &ja4l) == NGX_DECLINED)
+    if (ngx_ssl_ja4l(r->connection, r->pool, &ja4l) != NGX_OK)
     {
         return NGX_ERROR;
     }

@@ -10,8 +10,8 @@
 static ngx_int_t ngx_ssl_ja4_skip(const u_char **p, const u_char *end,
     size_t len_bytes);
 static ngx_uint_t ngx_ssl_ja4_highest_version(const u_char *p, size_t len);
-static char *ngx_ssl_ja4_first_alpn(const u_char *p, size_t len,
-    ngx_pool_t *pool);
+static ngx_int_t ngx_ssl_ja4_first_alpn(const u_char *p, size_t len,
+    ngx_pool_t *pool, char **alpn);
 
 
 /*
@@ -35,7 +35,7 @@ ngx_ssl_ja4_client_hello(ngx_connection_t *c, ngx_pool_t *pool,
         != NGX_OK)
     {
         ngx_log_debug0(NGX_LOG_DEBUG_EVENT, c->log, 0,
-                       "ja4: malformed ClientHello");
+                       "ja4: ClientHello is malformed or out of memory");
         ngx_memzero(ch, sizeof(ngx_ssl_ja4_client_hello_t));
         return NGX_ERROR;
     }
@@ -146,9 +146,12 @@ ngx_ssl_ja4_parse_client_hello(const u_char *buf, size_t len,
             break;
 
         case NGX_SSL_JA4_EXT_ALPN:
-            if (ch->first_alpn == NULL) {
-                ch->first_alpn = ngx_ssl_ja4_first_alpn(ext + 4, ext_len,
-                                                        pool);
+            if (ch->first_alpn == NULL
+                && ngx_ssl_ja4_first_alpn(ext + 4, ext_len, pool,
+                                          &ch->first_alpn)
+                   != NGX_OK)
+            {
+                return NGX_ERROR;
             }
             break;
         }
@@ -214,30 +217,37 @@ ngx_ssl_ja4_highest_version(const u_char *p, size_t len)
 }
 
 
-static char *
-ngx_ssl_ja4_first_alpn(const u_char *p, size_t len, ngx_pool_t *pool)
+/*
+ * Sets *alpn to the first protocol name, or leaves it NULL when the list is
+ * empty or invalid. NGX_ERROR means allocation failed, not a missing ALPN.
+ */
+
+static ngx_int_t
+ngx_ssl_ja4_first_alpn(const u_char *p, size_t len, ngx_pool_t *pool,
+    char **alpn)
 {
     size_t   n;
-    u_char  *alpn;
+    u_char  *name;
 
     /* ProtocolNameList: uint16 length, then uint8-prefixed names */
 
     if (len < 3) {
-        return NULL;
+        return NGX_OK;
     }
 
     n = p[2];
 
     if (n == 0 || n + 3 > len) {
-        return NULL;
+        return NGX_OK;
     }
 
-    alpn = ngx_pnalloc(pool, n + 1);
-    if (alpn == NULL) {
-        return NULL;
+    name = ngx_pnalloc(pool, n + 1);
+    if (name == NULL) {
+        return NGX_ERROR;
     }
 
-    *ngx_cpymem(alpn, p + 3, n) = '\0';
+    *ngx_cpymem(name, p + 3, n) = '\0';
+    *alpn = (char *) name;
 
-    return (char *) alpn;
+    return NGX_OK;
 }
