@@ -26,6 +26,7 @@
 # TEST 26 offers a GREASE lookalike in supported_versions (curlu
 # --utls-version-append).
 # TESTs 27-28 cap extension counts above 99 (curlu --utls-ext-append).
+# TESTs 29-31 put NUL bytes in the first ALPN name.
 #
 # Run:
 #   export TEST_NGINX_BINARY=/path/to/nginx
@@ -709,5 +710,68 @@ GET /t
     (map { sprintf '%04x', 0xfa00 + $_ } 0..119), qw(fe0d ff01))
 . "_0403,0804,0401,0503,0805,0501,0806,0601\n"
 . "ja4one=t13d1599h2_8daaf6152771_c6bd8854f70e\n"
+--- no_error_log
+[error]
+
+
+
+=== TEST 29: alpn_leading_nul
+# ALPN names are length-delimited bytes, so NUL counts (issue #85).
+# First ALPN bytes 00 68 32 (NUL "h2") -> 02; strlen() saw an empty name and gave 00.
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "ja4=$http_ssl_ja4\nja4_string=$http_ssl_ja4_string\nja4one=$http_ssl_ja4one\n";
+    }
+--- curl_protocol: https
+--- curl_options: --utls-hello HelloChrome_120 --utls-alpn-hex 006832
+--- request
+GET /t
+--- response_body_like chomp
+^ja4=t13i15[0-9]{2}02_8daaf6152771_[0-9a-f]{12}
+ja4_string=t13i15[0-9]{2}02_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_.*
+ja4one=t13i151402_8daaf6152771_36142f6fd6ef$
+--- no_error_log
+[error]
+
+
+
+=== TEST 30: alpn_trailing_nul
+# ALPN names are length-delimited bytes, so NUL counts (issue #85).
+# First ALPN bytes 68 00 ("h" NUL) -> 60; strlen() saw "h" and gave hh.
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "ja4=$http_ssl_ja4\nja4_string=$http_ssl_ja4_string\nja4one=$http_ssl_ja4one\n";
+    }
+--- curl_protocol: https
+--- curl_options: --utls-hello HelloChrome_120 --utls-alpn-hex 6800
+--- request
+GET /t
+--- response_body_like chomp
+^ja4=t13i15[0-9]{2}60_8daaf6152771_[0-9a-f]{12}
+ja4_string=t13i15[0-9]{2}60_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_.*
+ja4one=t13i151460_8daaf6152771_36142f6fd6ef$
+--- no_error_log
+[error]
+
+
+
+=== TEST 31: alpn_inner_nul
+# ALPN names are length-delimited bytes, so NUL counts (issue #85).
+# First ALPN bytes 68 00 32 ("h" NUL "2") -> h2; strlen() saw "h" and gave hh.
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "ja4=$http_ssl_ja4\nja4_string=$http_ssl_ja4_string\nja4one=$http_ssl_ja4one\n";
+    }
+--- curl_protocol: https
+--- curl_options: --utls-hello HelloChrome_120 --utls-alpn-hex 680032
+--- request
+GET /t
+--- response_body_like chomp
+^ja4=t13i15[0-9]{2}h2_8daaf6152771_[0-9a-f]{12}
+ja4_string=t13i15[0-9]{2}h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_.*
+ja4one=t13i1514h2_8daaf6152771_36142f6fd6ef$
 --- no_error_log
 [error]

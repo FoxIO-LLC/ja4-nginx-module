@@ -13,7 +13,7 @@ typedef struct {
     size_t           extensions_sz;
     char           **extensions;     /* "%04x" types in ClientHello order,
                                         GREASE included */
-    char            *first_alpn;     /* NUL-terminated, or NULL */
+    ngx_str_t        first_alpn;     /* raw bytes; len 0 if absent */
 } ngx_ssl_ja4_client_hello_t;
 
 
