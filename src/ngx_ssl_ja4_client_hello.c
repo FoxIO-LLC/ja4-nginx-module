@@ -10,8 +10,8 @@
 static ngx_int_t ngx_ssl_ja4_skip(const u_char **p, const u_char *end,
     size_t len_bytes);
 static ngx_uint_t ngx_ssl_ja4_highest_version(const u_char *p, size_t len);
-static ngx_int_t ngx_ssl_ja4_first_alpn(const u_char *p, size_t len,
-    ngx_pool_t *pool, char **alpn);
+static void ngx_ssl_ja4_first_alpn(const u_char *p, size_t len,
+    ngx_str_t *alpn);
 
 
 /*
@@ -146,12 +146,8 @@ ngx_ssl_ja4_parse_client_hello(const u_char *buf, size_t len,
             break;
 
         case NGX_SSL_JA4_EXT_ALPN:
-            if (ch->first_alpn == NULL
-                && ngx_ssl_ja4_first_alpn(ext + 4, ext_len, pool,
-                                          &ch->first_alpn)
-                   != NGX_OK)
-            {
-                return NGX_ERROR;
+            if (ch->first_alpn.len == 0) {
+                ngx_ssl_ja4_first_alpn(ext + 4, ext_len, &ch->first_alpn);
             }
             break;
         }
@@ -218,36 +214,28 @@ ngx_ssl_ja4_highest_version(const u_char *p, size_t len)
 
 
 /*
- * Sets *alpn to the first protocol name, or leaves it NULL when the list is
- * empty or invalid. NGX_ERROR means allocation failed, not a missing ALPN.
+ * Points *alpn at the first protocol name inside the saved ClientHello, or
+ * leaves it empty when the list is empty or invalid. Names are opaque bytes
+ * and may contain NUL, so the length is kept rather than terminated.
  */
 
-static ngx_int_t
-ngx_ssl_ja4_first_alpn(const u_char *p, size_t len, ngx_pool_t *pool,
-    char **alpn)
+static void
+ngx_ssl_ja4_first_alpn(const u_char *p, size_t len, ngx_str_t *alpn)
 {
-    size_t   n;
-    u_char  *name;
+    size_t  n;
 
     /* ProtocolNameList: uint16 length, then uint8-prefixed names */
 
     if (len < 3) {
-        return NGX_OK;
+        return;
     }
 
     n = p[2];
 
     if (n == 0 || n + 3 > len) {
-        return NGX_OK;
+        return;
     }
 
-    name = ngx_pnalloc(pool, n + 1);
-    if (name == NULL) {
-        return NGX_ERROR;
-    }
-
-    *ngx_cpymem(name, p + 3, n) = '\0';
-    *alpn = (char *) name;
-
-    return NGX_OK;
+    alpn->len = n;
+    alpn->data = (u_char *) p + 3;
 }

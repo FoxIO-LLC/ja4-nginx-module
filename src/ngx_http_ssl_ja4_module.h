@@ -39,8 +39,8 @@ typedef struct ngx_ssl_ja4_s
     size_t sigalgs_sz; // Count of signature algorithms
     char **sigalgs;    // List of signature algorithms
 
-    // For the first and last ALPN extension values
-    char *alpn_first_value;
+    // First ALPN protocol name as raw bytes (may contain NUL); len 0 if absent
+    ngx_str_t alpn_first_value;
 
     char cipher_hash[65];           // 32 bytes * 2 characters/byte + 1 for '\0'
     char cipher_hash_truncated[13]; // 12 bytes * 2 characters/byte + 1 for '\0'
@@ -367,16 +367,17 @@ ngx_ssl_ja4_detail_print(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4)
 
     /* ALPN Values */
     // handle if null
-    if (ja4->alpn_first_value == NULL)
+    if (ja4->alpn_first_value.len == 0)
     {
         ngx_log_debug0(NGX_LOG_DEBUG_EVENT,
                        pool->log, 0, "ssl_ja4: ALPN Value: NULL\n");
     }
     else
     {
-        ngx_log_debug1(NGX_LOG_DEBUG_EVENT,
-                       pool->log, 0, "ssl_ja4: ALPN Value: %s\n",
-                       ja4->alpn_first_value);
+        ngx_log_debug2(NGX_LOG_DEBUG_EVENT,
+                       pool->log, 0, "ssl_ja4: ALPN Value: %*xs\n",
+                       ja4->alpn_first_value.len,
+                       ja4->alpn_first_value.data);
     }
 }
 #endif
