@@ -90,25 +90,18 @@ ngx_ssl_ja4_is_ascii_alnum(u_char c)
 }
 
 static void
-ngx_ssl_ja4_write_alpn_code(u_char *dst, const char *alpn)
+ngx_ssl_ja4_write_alpn_code(u_char *dst, const ngx_str_t *alpn)
 {
     static const u_char hex[] = "0123456789abcdef";
 
-    if (alpn == NULL) {
+    if (alpn->len == 0) {
         dst[0] = '0';
         dst[1] = '0';
         return;
     }
 
-    size_t len = ngx_strlen(alpn);
-    if (len == 0) {
-        dst[0] = '0';
-        dst[1] = '0';
-        return;
-    }
-
-    u_char first = (u_char) alpn[0];
-    u_char last = (u_char) alpn[len - 1];
+    u_char first = alpn->data[0];
+    u_char last = alpn->data[alpn->len - 1];
 
     if (ngx_ssl_ja4_is_ascii_alnum(first) && ngx_ssl_ja4_is_ascii_alnum(last)) {
         dst[0] = first;
@@ -531,7 +524,7 @@ void ngx_ssl_ja4_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     cur += 2;
 
     // Add ALPN first/last value per JA4 spec
-    ngx_ssl_ja4_write_alpn_code(out->data + cur, ja4->alpn_first_value);
+    ngx_ssl_ja4_write_alpn_code(out->data + cur, &ja4->alpn_first_value);
     cur += 2;
 
 
@@ -659,7 +652,7 @@ void ngx_ssl_ja4_fp_string(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     cur += 2;
 
     // Add 2 characters for the ALPN ja4->alpn_first_value
-    ngx_ssl_ja4_write_alpn_code(out->data + cur, ja4->alpn_first_value);
+    ngx_ssl_ja4_write_alpn_code(out->data + cur, &ja4->alpn_first_value);
     cur += 2;
 
     // Separator
@@ -786,7 +779,7 @@ void ngx_ssl_ja4one_fp(ngx_pool_t *pool, ngx_ssl_ja4_t *ja4, ngx_str_t *out)
     cur += 2;
 
     // Add ALPN first/last value per JA4 spec
-    ngx_ssl_ja4_write_alpn_code(out->data + cur, ja4->alpn_first_value);
+    ngx_ssl_ja4_write_alpn_code(out->data + cur, &ja4->alpn_first_value);
     cur += 2;
 
     // Add underscore
