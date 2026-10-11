@@ -23,6 +23,8 @@
 #
 # TEST 24 sends a ClientHello with no extensions (curlu --utls-ext-none).
 # TEST 25 checks that one request computes the fingerprints once.
+# TEST 26 offers a GREASE lookalike in supported_versions (curlu
+# --utls-version-append).
 #
 # Run:
 #   export TEST_NGINX_BINARY=/path/to/nginx
@@ -634,5 +636,27 @@ qr/ja4: computing fingerprint|ja4 cache hit/
 ja4: computing fingerprint
 ja4 cache hit
 ja4 cache hit
+--- no_error_log
+[error]
+
+
+
+=== TEST 26: non_grease_supported_version_with_matching_low_nibbles
+# 0x1a2a is not GREASE: the bytes differ despite matching low nibbles. It is
+# the highest supported_versions value, and unknown, so the version is 00.
+# The server still negotiates TLS 1.3; the rest matches TEST 25.
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "ja4=$http_ssl_ja4\nja4one=$http_ssl_ja4one\n";
+    }
+--- curl_protocol: https
+--- server_addr_for_client: example.test
+--- curl_options: --utls-hello HelloChrome_133 --utls-version-append 0x1a2a
+--- request
+GET /t
+--- response_body
+ja4=t00d1516h2_8daaf6152771_d8a2da3f94cd
+ja4one=t00d1514h2_8daaf6152771_1e53c2b25e87
 --- no_error_log
 [error]
