@@ -90,11 +90,10 @@ ngx_connection_register_synack(ngx_connection_t *c, struct sockaddr *sa,
 
 
 /*
- * Called at the HTTP upstream's handoff points (connected, SSL start, request
- * sent, next upstream, finalize).  The first call that finds the socket
- * established moves the captured headers into c->saved_synack and drops the
- * registration.  Calls before that change nothing, so a later one retries;
- * calls after it do nothing.
+ * Called by the HTTP upstream once ngx_http_upstream_test_connect() has
+ * confirmed the connection (SSL start, request sent), so the SYN-ACK has
+ * already passed synack_in.  The first call moves the captured headers into
+ * c->saved_synack and drops the registration; later calls do nothing.
  */
 void
 ngx_connection_save_synack(ngx_connection_t *c)
@@ -102,26 +101,13 @@ ngx_connection_save_synack(ngx_connection_t *c)
     int                    rc;
     u_char                *buf;
     uint64_t               cookie;
-    socklen_t              len;
     ngx_uint_t             registered;
-    struct tcp_info        info;
     struct synack_record   record;
 
     if (c->synack_processed
         || c->synack_cookie == 0
         || c->pool == NULL
         || ngx_ebpf_capture_fd < 0)
-    {
-        return;
-    }
-
-    ngx_memzero(&info, sizeof(struct tcp_info));
-    len = sizeof(struct tcp_info);
-
-    /* confirm the handshake completed before consuming the capture */
-    if (getsockopt(c->fd, IPPROTO_TCP, TCP_INFO, &info, &len) == -1
-        || (info.tcpi_state != TCP_ESTABLISHED
-            && info.tcpi_state != TCP_CLOSE_WAIT))
     {
         return;
     }

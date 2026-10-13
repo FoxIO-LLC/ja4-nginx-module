@@ -35,9 +35,9 @@ diff --git a/src/core/ngx_connection.h b/src/core/ngx_connection.h
  #if (NGX_HAVE_SENDFILE_NODISKIO || NGX_COMPAT)
      unsigned            busy_count:2;
  #endif
-@@ -211,6 +215,11 @@ struct ngx_connection_s {
- #if (NGX_HAVE_TCP_SAVE_SYN)
+@@ -212,6 +216,11 @@ struct ngx_connection_s {
      ngx_str_t           saved_syn;  /* binary IP+TCP headers; empty if unset */
+     ngx_str_t           ja4t;       /* formatted JA4T; empty until first lookup */
  #endif
 +
 +#if (NGX_HAVE_EBPF)
@@ -230,17 +230,7 @@ diff --git a/src/http/ngx_http_upstream.c b/src/http/ngx_http_upstream.c
      rc = ngx_event_connect_peer(&u->peer);
  
      ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-@@ -1674,6 +1710,9 @@ ngx_http_upstream_connect(ngx_http_request_t *r, ngx_http_upstream_t *u)
- 
-     c->log = r->connection->log;
-     c->pool->log = c->log;
-+#if (NGX_HAVE_EBPF)
-+    ngx_http_upstream_save_synack(r, u);
-+#endif
-     c->read->log = c->log;
-     c->write->log = c->log;
- 
-@@ -1756,6 +1795,9 @@ ngx_http_upstream_ssl_init_connection(ngx_http_request_t *r,
+@@ -1756,6 +1792,9 @@ ngx_http_upstream_ssl_init_connection(ngx_http_request_t *r,
          ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_ERROR);
          return;
      }
@@ -250,7 +240,7 @@ diff --git a/src/http/ngx_http_upstream.c b/src/http/ngx_http_upstream.c
  
      if (ngx_ssl_create_connection(u->conf->ssl, c,
                                    NGX_SSL_BUFFER|NGX_SSL_CLIENT)
-@@ -2178,6 +2220,9 @@ ngx_http_upstream_send_request(ngx_http_request_t *r, ngx_http_upstream_t *u,
+@@ -2178,6 +2217,9 @@ ngx_http_upstream_send_request(ngx_http_request_t *r, ngx_http_upstream_t *u,
          ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_ERROR);
          return;
      }
@@ -260,28 +250,6 @@ diff --git a/src/http/ngx_http_upstream.c b/src/http/ngx_http_upstream.c
  
      c->log->action = "sending request to upstream";
  
-@@ -4602,6 +4647,10 @@ ngx_http_upstream_next(ngx_http_request_t *r, ngx_http_upstream_t *u,
-     ngx_msec_t  timeout;
-     ngx_uint_t  status, state;
- 
-+#if (NGX_HAVE_EBPF)
-+    ngx_http_upstream_save_synack(r, u);
-+#endif
-+
-     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                    "http next upstream, %xi", ft_type);
- 
-@@ -4785,6 +4834,10 @@ ngx_http_upstream_finalize_request(ngx_http_request_t *r,
-     *u->cleanup = NULL;
-     u->cleanup = NULL;
- 
-+#if (NGX_HAVE_EBPF)
-+    ngx_http_upstream_save_synack(r, u);
-+#endif
-+
-     if (u->resolved && u->resolved->ctx) {
-         ngx_resolve_name_done(u->resolved->ctx);
-         u->resolved->ctx = NULL;
 diff --git a/src/http/ngx_http_upstream.h b/src/http/ngx_http_upstream.h
 --- a/src/http/ngx_http_upstream.h
 +++ b/src/http/ngx_http_upstream.h
