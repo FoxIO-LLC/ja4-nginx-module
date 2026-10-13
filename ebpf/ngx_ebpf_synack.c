@@ -49,8 +49,6 @@ ngx_connection_register_synack(ngx_connection_t *c, struct sockaddr *sa,
         return;
     }
 
-    c->synack_enabled = 1;
-
     len = sizeof(uint64_t);
 
     /* the cookie is assigned on first use, so it must precede connect() */
@@ -109,8 +107,7 @@ ngx_connection_save_synack(ngx_connection_t *c)
     struct tcp_info        info;
     struct synack_record   record;
 
-    if (!c->synack_enabled
-        || c->synack_processed
+    if (c->synack_processed
         || c->synack_cookie == 0
         || c->pool == NULL
         || ngx_ebpf_capture_fd < 0)
