@@ -2,11 +2,12 @@
 /*
  * Per-connection side of the upstream SYN-ACK capture.
  *
- * A connection registers its socket cookie before connect(), consumes the
- * captured SYN-ACK headers once the socket is established, and unregisters
- * when it is closed.  The maps are LRU: what failures leave behind, e.g.
- * after a crashed worker, is evicted when an insert needs the room.  The
- * loader, ngx_ebpf_module.c, creates the maps.
+ * A connection registers its socket cookie before connect() and consumes the
+ * captured SYN-ACK headers once the upstream confirms the connection, which
+ * also drops the registration; a connection closed before that, e.g. after a
+ * failed connect(), drops it at close.  The maps are LRU: what failures leave
+ * behind, e.g. after a crashed worker, is evicted when an insert needs the
+ * room.  The loader, ngx_ebpf_module.c, creates the maps.
  */
 
 
@@ -37,7 +38,7 @@ ngx_connection_register_synack(ngx_connection_t *c, struct sockaddr *sa,
     int                        rc;
     uint64_t                   cookie;
     socklen_t                  len;
-    struct synack_connection   state;
+    struct synack_connection   conn;
 
     static ngx_msec_t          last_warning;
 
@@ -60,14 +61,14 @@ ngx_connection_register_synack(ngx_connection_t *c, struct sockaddr *sa,
         return;
     }
 
-    ngx_memzero(&state, sizeof(struct synack_connection));
+    ngx_memzero(&conn, sizeof(struct synack_connection));
 
-    rc = bpf_map_update_elem(ngx_ebpf_conn_fd, &cookie, &state, BPF_NOEXIST);
+    rc = bpf_map_update_elem(ngx_ebpf_conn_fd, &cookie, &conn, BPF_NOEXIST);
 
     if (rc < 0) {
         ngx_ebpf_count(SYNACK_STAT_REGISTER_FAILED);
 
-        /* the stats counter is exact; the log is limited to one per second */
+        /* log once per second at most; the counter counts every failure */
         if (ngx_current_msec - last_warning >= 1000) {
             last_warning = ngx_current_msec;
             ngx_log_error(NGX_LOG_WARN, c->log, -rc,
@@ -99,7 +100,6 @@ ngx_connection_save_synack(ngx_connection_t *c)
 
     if (c->synack_processed
         || c->synack_cookie == 0
-        || c->pool == NULL
         || ngx_ebpf_capture_fd < 0)
     {
         return;
@@ -195,22 +195,25 @@ ngx_connection_cleanup_synack(ngx_connection_t *c)
 static ngx_uint_t
 ngx_ebpf_remove(uint64_t cookie, ngx_uint_t consumed)
 {
+    int                         rc;
     ngx_uint_t                  registered;
-    struct synack_connection    state;
+    struct synack_connection    conn;
     struct synack_expectation   owner;
 
-    registered = bpf_map_lookup_and_delete_elem(ngx_ebpf_conn_fd, &cookie,
-                                                &state)
-                 == 0;
+    rc = bpf_map_lookup_and_delete_elem(ngx_ebpf_conn_fd, &cookie, &conn);
+    registered = (rc == 0);
 
     /* a completed capture has already removed the key it owned in BPF */
     if (registered
-        && state.phase != SYNACK_COMPLETE
-        && state.has_key
-        && bpf_map_lookup_elem(ngx_ebpf_expect_fd, &state.key, &owner) == 0
-        && owner.cookie == cookie)
+        && conn.phase != SYNACK_COMPLETE
+        && conn.has_key)
     {
-        (void) bpf_map_delete_elem(ngx_ebpf_expect_fd, &state.key);
+        rc = bpf_map_lookup_elem(ngx_ebpf_expect_fd, &conn.key, &owner);
+
+        /* only if this connection still owns the key */
+        if (rc == 0 && owner.cookie == cookie) {
+            (void) bpf_map_delete_elem(ngx_ebpf_expect_fd, &conn.key);
+        }
     }
 
     if (!consumed) {
