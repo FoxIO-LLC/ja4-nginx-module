@@ -62,13 +62,6 @@ ngx_connection_register_synack(ngx_connection_t *c, struct sockaddr *sa,
 
     ngx_memzero(&state, sizeof(struct synack_connection));
 
-#if (NGX_SYNACK_TEST)
-    if (getenv("NGX_SYNACK_TEST_MISS")) {
-        /* not pending: synack_out ignores it, so its SYN-ACK is missed */
-        state.phase = SYNACK_CLAIMED;
-    }
-#endif
-
     rc = bpf_map_update_elem(ngx_ebpf_conn_fd, &cookie, &state, BPF_NOEXIST);
 
     if (rc < 0) {
@@ -117,13 +110,6 @@ ngx_connection_save_synack(ngx_connection_t *c)
 
     cookie = c->synack_cookie;
 
-#if (NGX_SYNACK_TEST)
-    if (getenv("NGX_SYNACK_TEST_EVICT")) {
-        (void) bpf_map_delete_elem(ngx_ebpf_capture_fd, &cookie);
-        (void) bpf_map_delete_elem(ngx_ebpf_conn_fd, &cookie);
-    }
-#endif
-
     rc = bpf_map_lookup_and_delete_elem(ngx_ebpf_capture_fd, &cookie, &record);
 
     /*
@@ -171,13 +157,7 @@ ngx_connection_save_synack(ngx_connection_t *c)
         return;
     }
 
-#if (NGX_SYNACK_TEST)
-    buf = getenv("NGX_SYNACK_TEST_ALLOC_FAIL")
-          ? NULL : ngx_pnalloc(c->pool, record.length);
-#else
     buf = ngx_pnalloc(c->pool, record.length);
-#endif
-
     if (buf == NULL) {
         ngx_ebpf_count(SYNACK_STAT_ALLOC_FAILED);
         return;
@@ -187,28 +167,6 @@ ngx_connection_save_synack(ngx_connection_t *c)
 
     c->saved_synack.data = buf;
     c->saved_synack.len = record.length;
-
-#if (NGX_SYNACK_TEST)
-    {
-    int                        present;
-    u_char                     hex[SYNACK_MAX_HEADERS * 2];
-    ngx_str_t                  raw;
-    struct synack_record       retained;
-    struct synack_connection   state;
-
-    present = bpf_map_lookup_elem(ngx_ebpf_capture_fd, &cookie, &retained)
-              == 0
-              || bpf_map_lookup_elem(ngx_ebpf_conn_fd, &cookie, &state) == 0;
-
-    raw.data = hex;
-    raw.len = ngx_hex_dump(hex, c->saved_synack.data, c->saved_synack.len)
-              - hex;
-
-    ngx_log_error(NGX_LOG_NOTICE, c->log, 0,
-                  "synack test handoff: cookie=%uL len=%uz kernel=%d raw=%V",
-                  cookie, c->saved_synack.len, present, &raw);
-    }
-#endif
 }
 
 
