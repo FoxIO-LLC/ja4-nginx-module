@@ -3,9 +3,8 @@ Optional tcp_save_synack core integration (ebpf addon, HTTP upstreams).
 Apply to Nginx, then configure with --add-module=/path/to/ja4-nginx-module/ebpf
 to enable the feature. Independent of the client TCP_SAVE_SYN patch.
 
-New fields are appended after existing members, and builds with the addon add
-a module signature bit, so --with-compat modules built without it are refused
-instead of reading shifted structures.
+Builds with the addon add a module signature bit, so --with-compat modules
+built without it are refused instead of reading shifted structures.
 
 diff --git a/src/core/ngx_connection.c b/src/core/ngx_connection.c
 --- a/src/core/ngx_connection.c
@@ -102,17 +101,16 @@ diff --git a/src/event/ngx_event_connect.c b/src/event/ngx_event_connect.c
 diff --git a/src/event/ngx_event_connect.h b/src/event/ngx_event_connect.h
 --- a/src/event/ngx_event_connect.h
 +++ b/src/event/ngx_event_connect.h
-@@ -74,6 +74,10 @@ struct ngx_peer_connection_s {
-                                      /* ngx_connection_log_error_e */
-     unsigned                         log_error:2;
- 
+@@ -70,6 +70,9 @@ struct ngx_peer_connection_s {
+     unsigned                         transparent:1;
+     unsigned                         so_keepalive:1;
+     unsigned                         down:1;
 +#if (NGX_HAVE_EBPF)
 +    unsigned                         save_synack:1;
 +#endif
-+
-     NGX_COMPAT_BEGIN(1)
-     NGX_COMPAT_END
- };
+ 
+                                      /* ngx_connection_log_error_e */
+     unsigned                         log_error:2;
 diff --git a/src/http/ngx_http_core_module.c b/src/http/ngx_http_core_module.c
 --- a/src/http/ngx_http_core_module.c
 +++ b/src/http/ngx_http_core_module.c
@@ -253,14 +251,15 @@ diff --git a/src/http/ngx_http_upstream.c b/src/http/ngx_http_upstream.c
 diff --git a/src/http/ngx_http_upstream.h b/src/http/ngx_http_upstream.h
 --- a/src/http/ngx_http_upstream.h
 +++ b/src/http/ngx_http_upstream.h
-@@ -72,6 +72,10 @@ typedef struct {
- 
-     ngx_str_t                       *peer;
- 
+@@ -66,6 +66,11 @@ typedef struct {
+     ngx_msec_t                       connect_time;
+     ngx_msec_t                       header_time;
+     ngx_msec_t                       queue_time;
++
 +#if (NGX_HAVE_EBPF)
 +    ngx_str_t                        saved_synack;
 +#endif
 +
-     NGX_COMPAT_BEGIN(2)
-     NGX_COMPAT_END
- } ngx_http_upstream_state_t;
+     off_t                            response_length;
+     off_t                            bytes_received;
+     off_t                            bytes_sent;
