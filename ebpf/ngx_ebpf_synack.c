@@ -23,6 +23,13 @@
 static ngx_uint_t ngx_ebpf_remove(uint64_t cookie, ngx_uint_t consumed);
 
 
+/*
+ * Called by ngx_event_connect_peer() after the socket is created and before
+ * connect(), with the location's tcp_save_synack setting.  Registers the
+ * socket cookie so that the BPF programs capture this connection's SYN-ACK.
+ * Does nothing if capture is off, the addon is not loaded, or the peer is not
+ * TCP over IPv4/IPv6.  Failures are counted and never fail the connection.
+ */
 void
 ngx_connection_register_synack(ngx_connection_t *c, struct sockaddr *sa,
     ngx_flag_t enabled)
@@ -44,10 +51,9 @@ ngx_connection_register_synack(ngx_connection_t *c, struct sockaddr *sa,
 
     c->synack_enabled = 1;
 
-    /* the cookie is assigned on first use, so it must precede connect() */
-
     len = sizeof(uint64_t);
 
+    /* the cookie is assigned on first use, so it must precede connect() */
     if (getsockopt(c->fd, SOL_SOCKET, SO_COOKIE, &cookie, &len) == -1
         || len != sizeof(uint64_t)
         || cookie == 0)
@@ -71,7 +77,6 @@ ngx_connection_register_synack(ngx_connection_t *c, struct sockaddr *sa,
         ngx_ebpf_count(SYNACK_STAT_REGISTER_FAILED);
 
         /* the stats counter is exact; the log is limited to one per second */
-
         if (ngx_current_msec - last_warning >= 1000) {
             last_warning = ngx_current_msec;
             ngx_log_error(NGX_LOG_WARN, c->log, -rc,
@@ -86,6 +91,13 @@ ngx_connection_register_synack(ngx_connection_t *c, struct sockaddr *sa,
 }
 
 
+/*
+ * Called at the HTTP upstream's handoff points (connected, SSL start, request
+ * sent, next upstream, finalize).  The first call that finds the socket
+ * established moves the captured headers into c->saved_synack and drops the
+ * registration.  Calls before that change nothing, so a later one retries;
+ * calls after it do nothing.
+ */
 void
 ngx_connection_save_synack(ngx_connection_t *c)
 {
@@ -106,11 +118,10 @@ ngx_connection_save_synack(ngx_connection_t *c)
         return;
     }
 
-    /* confirm the handshake completed before consuming the capture */
-
     ngx_memzero(&info, sizeof(struct tcp_info));
     len = sizeof(struct tcp_info);
 
+    /* confirm the handshake completed before consuming the capture */
     if (getsockopt(c->fd, IPPROTO_TCP, TCP_INFO, &info, &len) == -1
         || (info.tcpi_state != TCP_ESTABLISHED
             && info.tcpi_state != TCP_CLOSE_WAIT))
@@ -119,7 +130,6 @@ ngx_connection_save_synack(ngx_connection_t *c)
     }
 
     /* one attempt: from here on the record is consumed or absent */
-
     c->synack_processed = 1;
 
     cookie = c->synack_cookie;
@@ -131,14 +141,12 @@ ngx_connection_save_synack(ngx_connection_t *c)
     }
 #endif
 
-    rc = bpf_map_lookup_and_delete_elem(ngx_ebpf_capture_fd, &cookie,
-                                        &record);
+    rc = bpf_map_lookup_and_delete_elem(ngx_ebpf_capture_fd, &cookie, &record);
 
     /*
      * The registration has no further use either way: a successful capture
      * has already deleted it in BPF, and a missed one can no longer happen.
      */
-
     registered = ngx_ebpf_remove(cookie, 1);
     c->synack_cookie = 0;
 
@@ -154,7 +162,6 @@ ngx_connection_save_synack(ngx_connection_t *c)
              * explain some misses; the rest took a path the programs cannot
              * see, or are bugs.
              */
-
             ngx_ebpf_count(SYNACK_STAT_MISSED);
 
         } else {
@@ -163,7 +170,6 @@ ngx_connection_save_synack(ngx_connection_t *c)
              * A capture replaces the registration with the record: with
              * neither left, the LRU maps evicted one of them.
              */
-
             ngx_ebpf_count(SYNACK_STAT_EVICTED);
         }
 
@@ -174,7 +180,6 @@ ngx_connection_save_synack(ngx_connection_t *c)
      * No freshness check: only this socket's SYN-ACK can create its record,
      * and it is consumed right after the handshake.
      */
-
     if (record.version != SYNACK_VERSION
         || record.length < 40
         || record.length > SYNACK_MAX_HEADERS)
@@ -224,6 +229,10 @@ ngx_connection_save_synack(ngx_connection_t *c)
 }
 
 
+/*
+ * Called by ngx_close_connection(): removes a registration that was never
+ * consumed, e.g. after a failed connect(), with any capture record left.
+ */
 void
 ngx_connection_cleanup_synack(ngx_connection_t *c)
 {
@@ -242,7 +251,6 @@ ngx_connection_cleanup_synack(ngx_connection_t *c)
  * capture record, so only the registration is left to delete.  Returns
  * whether the registration still existed.
  */
-
 static ngx_uint_t
 ngx_ebpf_remove(uint64_t cookie, ngx_uint_t consumed)
 {
@@ -255,7 +263,6 @@ ngx_ebpf_remove(uint64_t cookie, ngx_uint_t consumed)
                  == 0;
 
     /* a completed capture has already removed the key it owned in BPF */
-
     if (registered
         && state.phase != SYNACK_COMPLETE
         && state.has_key

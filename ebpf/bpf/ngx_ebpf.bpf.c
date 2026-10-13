@@ -10,9 +10,10 @@
  * namespace arrives in exactly that form, across DNAT/SNAT.  A reply that
  * loops back inside this namespace is un-NATed on its way out and does not
  * match; such local backends are not captured.  nginx does not use TCP Fast
- * Open upstream, so a SYN-ACK that acknowledges SYN data is not expected.  synack_in (early
- * PREROUTING) matches incoming SYN-ACKs against those keys and stores the
- * original IP/TCP headers for nginx to consume by socket cookie.
+ * Open upstream, so a SYN-ACK that acknowledges SYN data is not expected.
+ * synack_in (early PREROUTING) matches incoming SYN-ACKs against those keys
+ * and stores the original IP/TCP headers for nginx to consume by socket
+ * cookie.
  */
 
 
@@ -53,7 +54,6 @@
  * headers.  Callers check the flags and map state in between, so packets that
  * are not of interest never pay for the full copy.
  */
-
 static __always_inline int
 synack_parse_packet(struct sk_buff *skb, struct synack_key *key,
     __u32 *header_len, __u32 *sequence)
@@ -68,7 +68,6 @@ synack_parse_packet(struct sk_buff *skb, struct synack_key *key,
      * ctx->skb is a BTF pointer: direct CO-RE loads avoid helper calls on
      * the per-packet path.  Packet bytes still need bounded probe reads.
      */
-
     head = skb->head;
     offset = skb->network_header;
     tail = skb->tail;
@@ -79,7 +78,6 @@ synack_parse_packet(struct sk_buff *skb, struct synack_key *key,
      * Probe reads do not enforce skb bounds, so check the linear head
      * explicitly.  Headers outside it are deliberately rejected.
      */
-
     if (offset > tail
         || tail - offset < 20
         || data_offset > tail
@@ -99,7 +97,6 @@ synack_parse_packet(struct sk_buff *skb, struct synack_key *key,
         total = ((__u32) ip[2] << 8) | ip[3];
 
         /* options are allowed; fragments and non-TCP are not */
-
         if (off < 20 || ip[9] != IPPROTO_TCP || (ip[6] & 0x3f) || ip[7]) {
             return 0;
         }
@@ -215,7 +212,6 @@ synack_parse_packet(struct sk_buff *skb, struct synack_key *key,
  * cannot cover, are left to it.  Returns 0 only where the full parse could
  * not yield a SYN-ACK either.
  */
-
 #define SYNACK_FLAGS_READ_V4        34      /* IPv4 + TCP up to the flags */
 #define SYNACK_FLAGS_READ_V6        54      /* IPv6 + TCP up to the flags */
 #define SYNACK_MIN_TCP_V4           40      /* IPv4 + TCP headers, no options */
@@ -233,7 +229,6 @@ synack_candidate(struct sk_buff *skb)
     tail = skb->tail;
 
     /* the full parse needs at least an IPv4 and a TCP header */
-
     if (offset > tail || tail - offset < SYNACK_MIN_TCP_V4) {
         return 0;
     }
@@ -244,7 +239,7 @@ synack_candidate(struct sk_buff *skb)
         }
 
     } else if (bpf_probe_read_kernel(b, SYNACK_FLAGS_READ_V4, head + offset)) {
-        return 1;                       /* not invalid: let the full parse try */
+        return 1;                      /* not invalid: let the full parse try */
     }
 
     if (b[0] >> 4 == 4) {
@@ -289,7 +284,6 @@ synack_candidate(struct sk_buff *skb)
 
 
 /* header_len must come from a successful synack_parse_packet() on skb */
-
 static __always_inline int
 synack_copy_headers(struct sk_buff *skb, __u8 *bytes, __u32 header_len)
 {
@@ -316,7 +310,6 @@ synack_copy_headers(struct sk_buff *skb, __u8 *bytes, __u32 header_len)
  * never looked up again, so the LRU maps evict it first when an insert needs
  * room; no sweep runs, and nothing needs the clock.
  */
-
 struct {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);
     __uint(max_entries, SYNACK_CONNECTIONS);
@@ -351,7 +344,6 @@ struct {
 
 
 /* temporary storage only; it never retains a connection's result */
-
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
     __uint(max_entries, 1);
@@ -389,7 +381,6 @@ synack_remove_owned(struct synack_key *key, __u64 cookie)
  * A key's owner is alive while its registration exists: nginx removes it at
  * consume or close, and synack_in once it stores the capture.
  */
-
 static __always_inline int
 synack_owner_alive(__u64 cookie)
 {
@@ -414,7 +405,6 @@ synack_add_expectation(struct synack_key *key, __u64 cookie,
      * LRU map evicted it.  A SYN with another sequence number would need a
      * second key; a socket never sends one, so keep the first.
      */
-
     if (c->has_key && __builtin_memcmp(&c->key, key, sizeof(*key)) != 0) {
         synack_count(SYNACK_STAT_SECOND_KEY);
         return;
@@ -426,7 +416,6 @@ synack_add_expectation(struct synack_key *key, __u64 cookie,
         && bpf_map_update_elem(&synack_expect, key, &value, BPF_NOEXIST))
     {
         /* lost an insert race */
-
         e = bpf_map_lookup_elem(&synack_expect, key);
         if (e == NULL) {
             synack_count(SYNACK_STAT_EXPECT_FULL);
@@ -442,7 +431,6 @@ synack_add_expectation(struct synack_key *key, __u64 cookie,
          * The first owner keeps it; a SYN-ACK matching it is captured for
          * that owner, and this connection misses.
          */
-
         if (synack_owner_alive(e->cookie)) {
             synack_count(SYNACK_STAT_COLLISION);
             return;
@@ -453,7 +441,6 @@ synack_add_expectation(struct synack_key *key, __u64 cookie,
          * if absent.  A concurrent synack_in that still reads the old cookie
          * finds no registration for it and ignores the key.
          */
-
         e->cookie = cookie;
     }
 
@@ -463,7 +450,6 @@ synack_add_expectation(struct synack_key *key, __u64 cookie,
     }
 
     /* a concurrent synack_in may have completed while the key was added */
-
     if (c->phase != SYNACK_PENDING) {
         synack_remove_owned(key, cookie);
     }
@@ -487,7 +473,6 @@ synack_out(struct bpf_nf_ctx *ctx)
      * registered socket's SYN matters: two field reads let everything else
      * through before the map lookup.
      */
-
     sk = ctx->state->sk;
     if (sk == NULL) {
         sk = ctx->skb->sk;
@@ -501,17 +486,15 @@ synack_out(struct bpf_nf_ctx *ctx)
      * A TCP socket sends SYNs (first and retransmitted) only in SYN_SENT.
      * Established TCP and connected UDP, the bulk of traffic, stop here.
      * CLOSE passes too: unconnected raw and UDP sockets report it, and a TCP
-     * socket in CLOSE sends no data; they stop at the cookie check.  The SYN flag is still checked
-     * once the headers are parsed.
+     * socket in CLOSE sends no data; they stop at the cookie check.  The SYN
+     * flag is still checked once the headers are parsed.
      */
-
     state = sk->__sk_common.skc_state;
     if (state != TCP_SYN_SENT && state != TCP_CLOSE) {
         return SYNACK_NF_ACCEPT;
     }
 
     /* the cookie is assigned on first use; nginx asks before registering */
-
     cookie = sk->__sk_common.skc_cookie.counter;
     if (cookie == 0) {
         return SYNACK_NF_ACCEPT;
@@ -535,7 +518,6 @@ synack_out(struct bpf_nf_ctx *ctx)
     /* a retransmitted SYN re-adds the same keys */
 
     /* the SYN-ACK as it will arrive: the wire SYN reversed, acknowledging it */
-
     wire.family = packet.family;
     wire.protocol = IPPROTO_TCP;
     __builtin_memcpy(wire.src, packet.dst, 16);
@@ -567,7 +549,6 @@ synack_in(struct bpf_nf_ctx *ctx)
     seq = 0;
 
     /* every inbound packet reaches this hook: stay cheap until a match */
-
     if (!synack_candidate(ctx->skb)) {
         return SYNACK_NF_ACCEPT;
     }
@@ -598,14 +579,12 @@ synack_in(struct bpf_nf_ctx *ctx)
     cookie = e->cookie;
 
     /* a key whose owner is gone matches nothing */
-
     c = bpf_map_lookup_elem(&synack_conn, &cookie);
     if (c == NULL) {
         return SYNACK_NF_ACCEPT;
     }
 
     /* claim the connection so only one SYN-ACK is ever stored */
-
     if (__sync_val_compare_and_swap(&c->phase, SYNACK_PENDING, SYNACK_CLAIMED)
         != SYNACK_PENDING)
     {
@@ -628,7 +607,6 @@ synack_in(struct bpf_nf_ctx *ctx)
     }
 
     /* the capture now carries the result; c must not be used after this */
-
     bpf_map_delete_elem(&synack_conn, &cookie);
 
     synack_count(SYNACK_STAT_CAPTURED);

@@ -69,7 +69,6 @@ ngx_module_t  ngx_ebpf_module = {
 
 
 /* Process lifetime, deliberately independent of configuration-cycle pools. */
-
 int                         ngx_ebpf_conn_fd = -1;
 int                         ngx_ebpf_expect_fd = -1;
 int                         ngx_ebpf_capture_fd = -1;
@@ -128,7 +127,6 @@ ngx_ebpf_init(ngx_cycle_t *cycle)
     if (ngx_ebpf_started) {
 
         /* reload: keep what the first cycle created */
-
         if (conf->enabled && ngx_ebpf_skel == NULL) {
             ngx_log_error(NGX_LOG_EMERG, cycle->log, 0,
                           "tcp_save_synack: enabling capture requires "
@@ -146,7 +144,6 @@ ngx_ebpf_init(ngx_cycle_t *cycle)
     }
 
     /* libbpf prints to stderr by default; keep its detail in the error log */
-
     ngx_ebpf_log = cycle->log;
     (void) libbpf_set_print(ngx_ebpf_libbpf_print);
 
@@ -167,10 +164,9 @@ ngx_ebpf_init(ngx_cycle_t *cycle)
         goto failed;
     }
 
-    /* both PREROUTING links precede either POSTROUTING link */
-
     skipped = 0;
 
+    /* both PREROUTING links precede either POSTROUTING link */
     for (i = 0; i < NGX_EBPF_LINKS; i++) {
         ngx_memzero(&opts, sizeof(struct bpf_netfilter_opts));
         opts.sz = sizeof(struct bpf_netfilter_opts);
@@ -193,7 +189,6 @@ ngx_ebpf_init(ngx_cycle_t *cycle)
                                     : INT_MAX - 1 - (int) n;
 
             /* a taken priority is expected; libbpf would warn each time */
-
             ngx_ebpf_quiet = 1;
             link = bpf_program__attach_netfilter(prog, &opts);
             err = ngx_errno;
@@ -266,7 +261,6 @@ failed:
  * Attach attempts are quiet: a taken priority is expected, and the emerg
  * message carries the errno of the last attempt.
  */
-
 static int
 ngx_ebpf_libbpf_print(enum libbpf_print_level level, const char *fmt,
     va_list args)
@@ -298,8 +292,7 @@ ngx_ebpf_libbpf_print(enum libbpf_print_level level, const char *fmt,
         ngx_log_error(NGX_LOG_NOTICE, log, 0, "%*s", (size_t) n, buf);
 
     } else {
-        ngx_log_debug2(NGX_LOG_DEBUG_CORE, log, 0, "%*s",
-                       (size_t) n, buf);
+        ngx_log_debug2(NGX_LOG_DEBUG_CORE, log, 0, "%*s", (size_t) n, buf);
     }
 
     return 0;
@@ -316,7 +309,6 @@ ngx_ebpf_exit(ngx_cycle_t *cycle)
      * other processes share.  These links are not in skel->links, so
      * ngx_ebpf__destroy() does not touch them.
      */
-
     for (i = 0; i < NGX_EBPF_LINKS; i++) {
         if (ngx_ebpf_links[i]) {
             (void) close(bpf_link__fd(ngx_ebpf_links[i]));

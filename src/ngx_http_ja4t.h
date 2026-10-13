@@ -23,11 +23,11 @@ typedef struct {
 ngx_int_t ngx_http_ja4t_parse_syn(const u_char *buf, size_t len,
     ngx_http_ja4t_t *ja4t);
 
-ngx_int_t ngx_http_ja4t_format(const u_char *buf, size_t len, ngx_pool_t *pool,
-    ngx_str_t *out);
-
 #ifdef NGX_HAVE_TCP_SAVE_SYN
 ngx_int_t ngx_http_ja4t(ngx_connection_t *c, ngx_str_t *out);
 #endif
+
+ngx_int_t ngx_http_ja4t_format(const u_char *buf, size_t len, ngx_pool_t *pool,
+    ngx_str_t *out);
 
 #endif /* _NGX_HTTP_JA4T_H_INCLUDED_ */

@@ -1,8 +1,9 @@
 
 /*
  * Types and limits shared by the nginx side (ngx_ebpf_module.c, the loader,
- * and ngx_ebpf_synack.c) and the BPF programs (bpf/ngx_ebpf.bpf.c).  The map layouts are a private
- * contract: both sides must be built from the same revision.
+ * and ngx_ebpf_synack.c) and the BPF programs (bpf/ngx_ebpf.bpf.c).  The map
+ * layouts are a private contract: both sides must be built from the same
+ * revision.
  */
 
 
@@ -25,7 +26,6 @@
  * order.  IPv4 uses the first four address bytes.  All remaining bytes,
  * including pad, are zero, so keys compare as plain memory.
  */
-
 struct synack_key {
     __u16                   family;
     __u8                    protocol;
@@ -50,7 +50,6 @@ enum synack_phase {
  * registration, which nginx removes at consume or close, and what failures
  * leave behind is evicted by the LRU maps.
  */
-
 struct synack_connection {
     __u32                   phase;
     __u32                   has_key;
@@ -75,7 +74,6 @@ struct synack_record {
  * counters are appended.  The maps are LRU: an insert evicts instead of
  * failing, so the *_FULL counters only count lost insert races.
  */
-
 enum synack_stat {
     SYNACK_STAT_EXPECT_FULL = 0,
     SYNACK_STAT_SECOND_KEY,             /* a SYN wanting a different key */
