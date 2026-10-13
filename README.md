@@ -94,16 +94,9 @@ JA4T is empty when nginx is built without `NGX_HAVE_TCP_SAVE_SYN`, capture is of
 
 ### JA4TS
 
-JA4TS fingerprints the upstream server's SYN-ACK. It requires Linux 6.4+ with
-kernel BTF and Netfilter BPF support, libbpf 1.3+, and an Nginx master running
-as root or with `CAP_BPF`, `CAP_PERFMON` and `CAP_NET_ADMIN`. libbpf details
-about a failed load are logged at the `notice` level.
-Workers inherit the capture descriptors and need no BPF administration privileges.
-No conntrack, cgroup setup, interface list or separate collector is needed.
+JA4TS fingerprints the upstream server's SYN-ACK for proxied HTTP requests. It requires the optional [SYN-ACK capture patch](patches/nginx-tcp-save-synack.patch) and the `ebpf` addon, but not the SYN capture patch. It needs Linux 6.4+ with kernel BTF and Netfilter BPF support, and libbpf 1.3+. The nginx master must run as root or with `CAP_BPF`, `CAP_PERFMON` and `CAP_NET_ADMIN`; workers need no extra privileges.
 
-Install `libbpf-dev` (1.3+), `libelf-dev` and `pkg-config` in addition to the
-regular build dependencies; no BPF compiler is needed to build nginx. From a source
-tree with the JA4 patch applied:
+Install `libbpf-dev` (1.3+), `libelf-dev` and `pkg-config` in addition to the regular build dependencies. From a source tree with the ClientHello patch applied:
 
 ```bash
 patch -p1 < "$ja4_module_dir/patches/nginx-tcp-save-synack.patch"
@@ -113,36 +106,21 @@ patch -p1 < "$ja4_module_dir/patches/nginx-tcp-save-synack.patch"
 make
 ```
 
-The `ebpf/` addon is the Nginx eBPF loader. `ngx_ebpf_module.c` loads and
-attaches the BPF object, `ngx_ebpf_synack.c` registers, consumes and releases
-each upstream connection's capture, and `ngx_ebpf.h` is shared with the
-kernel-side sources in `ebpf/bpf/`. The compiled BPF programs are embedded in
-the committed `ebpf/ngx_ebpf.skel.h`, a libbpf skeleton.
-The object is CO-RE, so this one skeleton loads on every supported kernel.
-
-After changing `ebpf/bpf/ngx_ebpf.bpf.c` or `ebpf/ngx_ebpf.h`, regenerate and
-commit the skeleton with `sh ebpf/gen-skel.sh`. This needs clang with a BPF
-backend (`clang-18` is preferred when present), `bpftool` (on Ubuntu also in the
-matching `linux-tools` package) and kernel BTF. `BPF_CLANG`, `BPFTOOL` and
-`BPF_BTF` override them. The skeleton records a hash of its inputs, and
-`sh ebpf/gen-skel.sh --check` rejects a stale one.
-
-The addon must be linked statically.
-Builds with it add a module signature bit, so `--with-compat` dynamic modules must
-be built against the same configuration. The SYN-ACK patch does not require the
-client SYN patch.
+The addon must be linked statically. It changes the module signature, so `--with-compat` dynamic modules must be built with the same configuration.
 
 ```nginx
 http {
     tcp_save_synack on;
     log_format upstream_fp '$request ja4ts=$upstream_ja4ts';
+
     server {
         listen 8080;
         access_log logs/upstream.log upstream_fp;
+
         location / {
             proxy_pass http://127.0.0.1:9000;
-            add_header X-Upstream-JA4TS $upstream_ja4ts;
         }
+
         location /uncaptured/ {
             tcp_save_synack off;
             proxy_pass http://127.0.0.1:9000;
@@ -151,50 +129,19 @@ http {
 }
 ```
 
-`tcp_save_synack` defaults to `off` and inherits through `http`, `server` and
-`location`. It is invalid at main scope, inside `upstream`, and in `stream`
-(stream proxying is not captured).
+`tcp_save_synack` defaults to `off` and can be set at `http`, `server` and `location` level; the setting of the location that proxied the request applies. Stream proxying is not captured.
 
-`$upstream_ja4ts` returns `window_options_mss_window-scale`, such as
-`64240_2-4-8-1-3_1460_7`, for the final upstream attempt. Unlike `$upstream_addr`
-or `$upstream_status`, it is not a per-attempt list. It remains available in
-access logs after that connection closes. JA4TS has no hashed form, so there is
-no `_string` variant. The policy of the location that proxied
-the request applies, so the value survives `error_page` and other internal
-redirects into locations with capture off. Early evaluation, capture disabled
-where the request was proxied, no upstream, refused connections and missing
-records produce an empty value. A later successful capture can replace an early
-empty result. TLS is optional.
+`$upstream_ja4ts` contains the window size, option kinds, MSS and window scale, such as `64240_2-4-8-1-3_1460_7`, for the final upstream attempt; unlike `$upstream_addr`, it is not a per-attempt list. A reused keepalive connection reports the SYN-ACK of its original handshake. The value is empty when capture is off, the request was not proxied, the connection failed, or no SYN-ACK was captured.
 
-Keepalive reuse retains the socket's original capture policy. Off requests always
-see empty values; turning capture on cannot recover a handshake that was never
-captured. IPv4, IPv6 and conventional DNAT/SNAT are supported for upstreams on
-other hosts or in other network namespaces; an upstream in nginx's own
-namespace reached through NAT (e.g. REDIRECT) is not captured. UDP, Unix sockets
-and QUIC are excluded. Upstream connections do not use TCP Fast Open (stock nginx
-never enables it), so a SYN-ACK that acknowledges SYN data is not matched.
-Original bytes are those observed at early PREROUTING, before later hook rewrites.
-Retransmission timing and RST suffixes are not included.
-
-Default-off startup creates no BPF resources. Configuration tests and signal-only
-commands do not load BPF, so `nginx -t` cannot detect a kernel that will refuse the
-programs. Enabled capture that cannot initialize fails startup by design;
-individual capture failures leave proxy traffic working. Reloads reuse resources,
-but enabling capture from an entirely disabled running instance requires restart.
+Capture that is enabled but cannot be loaded fails nginx startup. `nginx -t` does not check whether the kernel accepts the BPF programs, and turning capture on in a running instance where it was off everywhere requires a restart rather than a reload.
 
 Known limitations:
 
-- Only IP/TCP headers in the linear part of the socket buffer are read. Drivers
-  that leave the TCP header in page fragments at PREROUTING produce no capture
-  (the request still succeeds with an empty value). Loopback and veth are linear.
-- XDP and TC mangling is out of scope. A SYN-ACK whose bytes are rewritten on
-  ingress before netfilter (MSS clamping, option or window rewriting) is
-  fingerprinted as rewritten, and asymmetric address rewriting (decapsulation,
-  DSR) prevents capture. Symmetric BPF NAT, such as Cilium's BPF masquerading,
-  works.
-- Unprivileged workers are verified on Linux 6.8. On 6.4, kernels with
-  `kernel.unprivileged_bpf_disabled` set may refuse map access from non-root
-  workers; this is unverified.
+- Only TCP over IPv4 and IPv6 is captured; Unix socket, UDP and QUIC upstreams are not.
+- DNAT/SNAT to upstreams on other hosts or in other network namespaces works; an upstream in nginx's own namespace reached through NAT (e.g. `REDIRECT`) is not captured.
+- A SYN-ACK rewritten before netfilter (MSS clamping, XDP or TC programs) is fingerprinted as rewritten; asymmetric rewriting (decapsulation, DSR) prevents capture.
+- Some network drivers deliver packet headers in a form the capture cannot read; those requests get an empty value.
+- Non-root workers are verified on Linux 6.8. On older kernels with `kernel.unprivileged_bpf_disabled` set, workers may be refused map access.
 
 ## Testing
 
