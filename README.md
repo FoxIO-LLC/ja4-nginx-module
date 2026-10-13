@@ -124,8 +124,8 @@ After changing `ebpf/bpf/ngx_ebpf.bpf.c` or `ebpf/ngx_ebpf.h`, regenerate and
 commit the skeleton with `sh ebpf/gen-skel.sh`. This needs clang with a BPF
 backend (`clang-18` is preferred when present), `bpftool` (on Ubuntu also in the
 matching `linux-tools` package) and kernel BTF. `BPF_CLANG`, `BPFTOOL` and
-`BPF_BTF` override them. The skeleton records a hash
-of its inputs; `sh ebpf/gen-skel.sh --check`, which CI runs, rejects a stale one.
+`BPF_BTF` override them. The skeleton records a hash of its inputs, and
+`sh ebpf/gen-skel.sh --check` rejects a stale one.
 
 The addon must be linked statically.
 Builds with it add a module signature bit, so `--with-compat` dynamic modules must
