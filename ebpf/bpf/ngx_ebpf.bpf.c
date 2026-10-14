@@ -370,7 +370,6 @@ synack_remove_owned(struct synack_key *key, __u64 cookie)
     struct synack_expectation  *e;
 
     e = bpf_map_lookup_elem(&synack_expect, key);
-
     if (e && e->cookie == cookie) {
         bpf_map_delete_elem(&synack_expect, key);
     }
@@ -411,14 +410,13 @@ synack_add_expectation(struct synack_key *key, __u64 cookie,
     }
 
     e = bpf_map_lookup_elem(&synack_expect, key);
-
     if (e == NULL
         && bpf_map_update_elem(&synack_expect, key, &value, BPF_NOEXIST))
     {
-        /* lost an insert race */
+        /* another CPU inserted the key since the lookup */
         e = bpf_map_lookup_elem(&synack_expect, key);
         if (e == NULL) {
-            synack_count(SYNACK_STAT_EXPECT_FULL);
+            synack_count(SYNACK_STAT_EXPECT_FAILED);
             return;
         }
     }
@@ -449,7 +447,7 @@ synack_add_expectation(struct synack_key *key, __u64 cookie,
         c->has_key = 1;
     }
 
-    /* a concurrent synack_in may have completed while the key was added */
+    /* a concurrent synack_in may have claimed it while the key was added */
     if (c->phase != SYNACK_PENDING) {
         synack_remove_owned(key, cookie);
     }
@@ -483,14 +481,13 @@ synack_out(struct bpf_nf_ctx *ctx)
     }
 
     /*
-     * A TCP socket sends SYNs (first and retransmitted) only in SYN_SENT.
-     * Established TCP and connected UDP, the bulk of traffic, stop here.
-     * CLOSE passes too: unconnected raw and UDP sockets report it, and a TCP
-     * socket in CLOSE sends no data; they stop at the cookie check.  The SYN
-     * flag is still checked once the headers are parsed.
+     * A TCP socket sends SYNs (first and retransmitted) only in SYN_SENT,
+     * which no other protocol uses: established TCP, UDP and raw sockets,
+     * the bulk of traffic, stop here.  The SYN flag is still checked once
+     * the headers are parsed.
      */
     state = sk->__sk_common.skc_state;
-    if (state != TCP_SYN_SENT && state != TCP_CLOSE) {
+    if (state != TCP_SYN_SENT) {
         return SYNACK_NF_ACCEPT;
     }
 
@@ -501,7 +498,6 @@ synack_out(struct bpf_nf_ctx *ctx)
     }
 
     c = bpf_map_lookup_elem(&synack_conn, &cookie);
-
     if (c == NULL || c->phase != SYNACK_PENDING) {
         return SYNACK_NF_ACCEPT;
     }
@@ -514,8 +510,6 @@ synack_out(struct bpf_nf_ctx *ctx)
     if ((flags & SYNACK_TCP_FLAGS) != SYNACK_TCP_SYN) {
         return SYNACK_NF_ACCEPT;
     }
-
-    /* a retransmitted SYN re-adds the same keys */
 
     /* the SYN-ACK as it will arrive: the wire SYN reversed, acknowledging it */
     wire.family = packet.family;
@@ -560,7 +554,6 @@ synack_in(struct bpf_nf_ctx *ctx)
     }
 
     e = bpf_map_lookup_elem(&synack_expect, &key);
-
     if (e == NULL) {
         return SYNACK_NF_ACCEPT;
     }
@@ -591,16 +584,13 @@ synack_in(struct bpf_nf_ctx *ctx)
         return SYNACK_NF_ACCEPT;
     }
 
-    tmp->version = SYNACK_VERSION;
     tmp->length = length;
 
     if (bpf_map_update_elem(&synack_capture, &cookie, tmp, BPF_NOEXIST)) {
         __sync_lock_test_and_set(&c->phase, SYNACK_PENDING);
-        synack_count(SYNACK_STAT_CAPTURE_FULL);
+        synack_count(SYNACK_STAT_CAPTURE_FAILED);
         return SYNACK_NF_ACCEPT;
     }
-
-    __sync_lock_test_and_set(&c->phase, SYNACK_COMPLETE);
 
     if (c->has_key) {
         synack_remove_owned(&c->key, cookie);

@@ -16,7 +16,6 @@
 #endif
 
 
-#define SYNACK_VERSION          2
 #define SYNACK_MAX_HEADERS      256
 #define SYNACK_CONNECTIONS      65536   /* and one expectation key each */
 
@@ -40,8 +39,7 @@ struct synack_key {
 
 enum synack_phase {
     SYNACK_PENDING = 0,
-    SYNACK_CLAIMED,
-    SYNACK_COMPLETE
+    SYNACK_CLAIMED
 };
 
 
@@ -51,7 +49,7 @@ enum synack_phase {
  * leave behind is evicted by the LRU maps.
  */
 struct synack_connection {
-    __u32                   phase;
+    __u32                   phase;      /* BPF atomics need 32 or 64 bits */
     __u32                   has_key;
     struct synack_key       key;        /* the SYN's wire tuple, reversed */
 };
@@ -63,7 +61,6 @@ struct synack_expectation {
 
 
 struct synack_record {
-    __u32                   version;
     __u32                   length;
     __u8                    headers[SYNACK_MAX_HEADERS];
 };
@@ -71,14 +68,15 @@ struct synack_record {
 
 /*
  * Indexes into the synack_stats array; the tests read them by number, so new
- * counters are appended.  The maps are LRU: an insert evicts instead of
- * failing, so the *_FULL counters only count lost insert races.
+ * counters are appended.  The maps are LRU and evict instead of failing when
+ * full, so EXPECT_FAILED and CAPTURE_FAILED count only rare insert failures,
+ * such as a racing delete or an LRU without a free node.
  */
 enum synack_stat {
-    SYNACK_STAT_EXPECT_FULL = 0,
+    SYNACK_STAT_EXPECT_FAILED = 0,
     SYNACK_STAT_SECOND_KEY,             /* a SYN wanting a different key */
     SYNACK_STAT_COLLISION,
-    SYNACK_STAT_CAPTURE_FULL,
+    SYNACK_STAT_CAPTURE_FAILED,
     SYNACK_STAT_CAPTURED,
     SYNACK_STAT_EXPIRED,
     SYNACK_STAT_REGISTER_FAILED,
@@ -87,7 +85,7 @@ enum synack_stat {
     SYNACK_STAT_INVALID_RECORD,
     SYNACK_STAT_EVICTED,                /* registration or capture evicted */
     SYNACK_STAT_MISSED,                 /* registered, but nothing captured */
-    SYNACK_STAT_COUNT
+    SYNACK_STAT_COUNT                   /* sentinel: number of counters */
 };
 
 

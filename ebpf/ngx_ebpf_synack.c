@@ -127,9 +127,9 @@ ngx_connection_save_synack(ngx_connection_t *c)
 
             /*
              * The registration is still pending: the SYN-ACK was not
-             * captured.  The *_FULL, SECOND_KEY and COLLISION counters
-             * explain some misses; the rest took a path the programs cannot
-             * see, or are bugs.
+             * captured.  The EXPECT_FAILED, CAPTURE_FAILED, SECOND_KEY and
+             * COLLISION counters explain some misses; the rest took a path
+             * the programs cannot see, or are bugs.
              */
             ngx_ebpf_count(SYNACK_STAT_MISSED);
 
@@ -149,10 +149,7 @@ ngx_connection_save_synack(ngx_connection_t *c)
      * No freshness check: only this socket's SYN-ACK can create its record,
      * and it is consumed right after the handshake.
      */
-    if (record.version != SYNACK_VERSION
-        || record.length < 40
-        || record.length > SYNACK_MAX_HEADERS)
-    {
+    if (record.length < 40 || record.length > SYNACK_MAX_HEADERS) {
         ngx_ebpf_count(SYNACK_STAT_INVALID_RECORD);
         return;
     }
@@ -203,11 +200,7 @@ ngx_ebpf_remove(uint64_t cookie, ngx_uint_t consumed)
     rc = bpf_map_lookup_and_delete_elem(ngx_ebpf_conn_fd, &cookie, &conn);
     registered = (rc == 0);
 
-    /* a completed capture has already removed the key it owned in BPF */
-    if (registered
-        && conn.phase != SYNACK_COMPLETE
-        && conn.has_key)
-    {
+    if (registered && conn.has_key) {
         rc = bpf_map_lookup_elem(ngx_ebpf_expect_fd, &conn.key, &owner);
 
         /* only if this connection still owns the key */
