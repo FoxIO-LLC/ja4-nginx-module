@@ -45,6 +45,11 @@
 /* the last offset at which a minimal TCP header still fits the record */
 #define SYNACK_MAX_TCP_OFFSET       (SYNACK_MAX_HEADERS - 20)
 
+#define SYNACK_FLAGS_READ_V4        34      /* IPv4 + TCP up to the flags */
+#define SYNACK_FLAGS_READ_V6        54      /* IPv6 + TCP up to the flags */
+#define SYNACK_MIN_TCP_V4           40      /* IPv4 + TCP headers, no options */
+#define SYNACK_MIN_TCP_V6           60      /* IPv6 + TCP headers */
+
 
 /*
  * Bounded IP/TCP header reader for Netfilter BPF programs.
@@ -212,11 +217,6 @@ synack_parse_packet(struct sk_buff *skb, struct synack_key *key,
  * cannot cover, are left to it.  Returns 0 only where the full parse could
  * not yield a SYN-ACK either.
  */
-#define SYNACK_FLAGS_READ_V4        34      /* IPv4 + TCP up to the flags */
-#define SYNACK_FLAGS_READ_V6        54      /* IPv6 + TCP up to the flags */
-#define SYNACK_MIN_TCP_V4           40      /* IPv4 + TCP headers, no options */
-#define SYNACK_MIN_TCP_V6           60      /* IPv6 + TCP headers */
-
 static __always_inline int
 synack_candidate(struct sk_buff *skb)
 {
@@ -376,17 +376,6 @@ synack_remove_owned(struct synack_key *key, __u64 cookie)
 }
 
 
-/*
- * A key's owner is alive while its registration exists: nginx removes it at
- * consume or close, and synack_in once it stores the capture.
- */
-static __always_inline int
-synack_owner_alive(__u64 cookie)
-{
-    return bpf_map_lookup_elem(&synack_conn, &cookie) != NULL;
-}
-
-
 static __always_inline void
 synack_add_expectation(struct synack_key *key, __u64 cookie,
     struct synack_connection *c)
@@ -400,11 +389,22 @@ synack_add_expectation(struct synack_key *key, __u64 cookie,
     }
 
     /*
-     * A retransmitted SYN has the same key, and goes on to re-add it if the
-     * LRU map evicted it.  A SYN with another sequence number would need a
-     * second key; a socket never sends one, so keep the first.
+     * The first SYN, finding no key (family 0), records its key before any
+     * expectation names this cookie: synack_in reaches c only through one,
+     * so it always finds the key.  A socket's SYNs pass this hook one at a
+     * time, under its socket lock, so only the first records it.
+     *
+     * A retransmitted SYN builds the same key: the same tuple and ISN, and
+     * SNAT keeps its mapping.  It re-adds the key below if the LRU map
+     * evicted it, or retries it after a collision.  A different key needs
+     * another ISN or SNAT mapping: nginx never reconnects a socket, but
+     * conntrack can lose the entry and re-NAT a later SYN.  Keep the first
+     * key.
      */
-    if (c->has_key && __builtin_memcmp(&c->key, key, sizeof(*key)) != 0) {
+    if (c->key.family == 0) {
+        c->key = *key;
+
+    } else if (__builtin_memcmp(&c->key, key, sizeof(*key)) != 0) {
         synack_count(SYNACK_STAT_SECOND_KEY);
         return;
     }
@@ -427,28 +427,35 @@ synack_add_expectation(struct synack_key *key, __u64 cookie,
          * Another live connection already expects this key: the same tuple
          * and initial sequence number, which only crafted traffic produces.
          * The first owner keeps it; a SYN-ACK matching it is captured for
-         * that owner, and this connection misses.
+         * that owner, and this connection misses.  An owner is live while
+         * registered: nginx removes the registration at consume or close,
+         * and synack_in once it stores the capture.
          */
-        if (synack_owner_alive(e->cookie)) {
+        if (bpf_map_lookup_elem(&synack_conn, &e->cookie)) {
             synack_count(SYNACK_STAT_COLLISION);
             return;
         }
 
         /*
-         * The owner is gone, e.g. its worker crashed: take the key over as
-         * if absent.  A concurrent synack_in that still reads the old cookie
-         * finds no registration for it and ignores the key.
+         * The owner is no longer registered, e.g. its worker crashed and the
+         * LRU map evicted the registration: take the key over as if absent.
+         * The exchange makes the recorded key visible before the new owner,
+         * as the insert above does.  A concurrent synack_in that still
+         * reads the old cookie finds no registration for it and ignores the
+         * key.
          */
-        e->cookie = cookie;
+        __sync_lock_test_and_set(&e->cookie, cookie);
     }
 
-    if (!c->has_key) {
-        c->key = *key;
-        c->has_key = 1;
-    }
-
-    /* a concurrent synack_in may have claimed it while the key was added */
-    if (c->phase != SYNACK_PENDING) {
+    /*
+     * synack_in may have claimed c through an earlier copy of the key, and
+     * removed it, before this SYN re-added it.  The fully ordered read
+     * pairs with the claim: either synack_in sees the new copy, or this
+     * sees the claim.
+     */
+    if (__sync_val_compare_and_swap(&c->phase, SYNACK_PENDING, SYNACK_PENDING)
+        != SYNACK_PENDING)
+    {
         synack_remove_owned(key, cookie);
     }
 }
@@ -497,8 +504,14 @@ synack_out(struct bpf_nf_ctx *ctx)
         return SYNACK_NF_ACCEPT;
     }
 
+    /* other applications' sockets with cookies are not registered */
     c = bpf_map_lookup_elem(&synack_conn, &cookie);
-    if (c == NULL || c->phase != SYNACK_PENDING) {
+    if (c == NULL) {
+        return SYNACK_NF_ACCEPT;
+    }
+
+    /* a claimed connection's retransmitted SYN needs no new expectation */
+    if (c->phase != SYNACK_PENDING) {
         return SYNACK_NF_ACCEPT;
     }
 
@@ -534,7 +547,7 @@ synack_in(struct bpf_nf_ctx *ctx)
     __u32                        zero, length, seq;
     __u64                        cookie;
     struct synack_key            key = {};
-    struct synack_record        *tmp;
+    struct synack_record        *record;
     struct synack_connection    *c;
     struct synack_expectation   *e;
 
@@ -558,14 +571,14 @@ synack_in(struct bpf_nf_ctx *ctx)
         return SYNACK_NF_ACCEPT;
     }
 
-    tmp = bpf_map_lookup_elem(&synack_scratch, &zero);
-    if (tmp == NULL) {
+    record = bpf_map_lookup_elem(&synack_scratch, &zero);
+    if (record == NULL) {
         return SYNACK_NF_ACCEPT;
     }
 
-    __builtin_memset(tmp, 0, sizeof(*tmp));
+    __builtin_memset(record, 0, sizeof(*record));
 
-    if (synack_copy_headers(ctx->skb, tmp->headers, length)) {
+    if (synack_copy_headers(ctx->skb, record->headers, length)) {
         return SYNACK_NF_ACCEPT;
     }
 
@@ -584,17 +597,16 @@ synack_in(struct bpf_nf_ctx *ctx)
         return SYNACK_NF_ACCEPT;
     }
 
-    tmp->length = length;
+    record->length = length;
 
-    if (bpf_map_update_elem(&synack_capture, &cookie, tmp, BPF_NOEXIST)) {
+    if (bpf_map_update_elem(&synack_capture, &cookie, record, BPF_NOEXIST)) {
         __sync_lock_test_and_set(&c->phase, SYNACK_PENDING);
         synack_count(SYNACK_STAT_CAPTURE_FAILED);
         return SYNACK_NF_ACCEPT;
     }
 
-    if (c->has_key) {
-        synack_remove_owned(&c->key, cookie);
-    }
+    /* the key was recorded before the expectation that led here */
+    synack_remove_owned(&c->key, cookie);
 
     /* the capture now carries the result; c must not be used after this */
     bpf_map_delete_elem(&synack_conn, &cookie);

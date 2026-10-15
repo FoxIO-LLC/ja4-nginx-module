@@ -84,10 +84,28 @@ static ngx_uint_t           ngx_ebpf_quiet;
 static void *
 ngx_ebpf_create_conf(ngx_cycle_t *cycle)
 {
-    return ngx_pcalloc(cycle->pool, sizeof(ngx_ebpf_conf_t));
+    ngx_ebpf_conf_t  *conf;
+
+    conf = ngx_pcalloc(cycle->pool, sizeof(ngx_ebpf_conf_t));
+    if (conf == NULL) {
+        return NULL;
+    }
+
+    /*
+     * set by ngx_pcalloc():
+     *
+     *     conf->enabled = 0;
+     */
+
+    return conf;
 }
 
 
+/*
+ * Called by the HTTP core merge for each location with tcp_save_synack on:
+ * marks the cycle so that ngx_ebpf_init() loads the BPF programs.  Fails on
+ * reload if the first cycle did not load them, since only a restart can.
+ */
 ngx_int_t
 ngx_ebpf_require(ngx_conf_t *cf)
 {

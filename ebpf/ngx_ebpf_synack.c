@@ -200,10 +200,11 @@ ngx_ebpf_remove(uint64_t cookie, ngx_uint_t consumed)
     rc = bpf_map_lookup_and_delete_elem(ngx_ebpf_conn_fd, &cookie, &conn);
     registered = (rc == 0);
 
-    if (registered && conn.has_key) {
+    /* a key family of 0: no SYN recorded a key */
+    if (registered && conn.key.family != 0) {
         rc = bpf_map_lookup_elem(ngx_ebpf_expect_fd, &conn.key, &owner);
 
-        /* only if this connection still owns the key */
+        /* only if this connection owns the key: a collision records it too */
         if (rc == 0 && owner.cookie == cookie) {
             (void) bpf_map_delete_elem(ngx_ebpf_expect_fd, &conn.key);
         }
