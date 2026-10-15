@@ -71,15 +71,12 @@ struct synack_record {
  * Indexes into the synack_stats array; the tests read them by number, so new
  * counters are appended.  The maps are LRU and evict instead of failing when
  * full, so EXPECT_FAILED and CAPTURE_FAILED count only rare insert failures,
- * such as a racing delete or an LRU without a free node.
+ * such as an LRU without a free node.
  */
 enum synack_stat {
     SYNACK_STAT_EXPECT_FAILED = 0,
-    SYNACK_STAT_SECOND_KEY,             /* a SYN wanting a different key */
-    SYNACK_STAT_COLLISION,
     SYNACK_STAT_CAPTURE_FAILED,
     SYNACK_STAT_CAPTURED,
-    SYNACK_STAT_EXPIRED,
     SYNACK_STAT_REGISTER_FAILED,
     SYNACK_STAT_ALLOC_FAILED,
     SYNACK_STAT_HANDOFF_ERROR,

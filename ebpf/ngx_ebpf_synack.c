@@ -127,9 +127,9 @@ ngx_connection_save_synack(ngx_connection_t *c)
 
             /*
              * The registration is still pending: the SYN-ACK was not
-             * captured.  The EXPECT_FAILED, CAPTURE_FAILED, SECOND_KEY and
-             * COLLISION counters explain some misses; the rest took a path
-             * the programs cannot see, or are bugs.
+             * captured.  The EXPECT_FAILED and CAPTURE_FAILED counters
+             * explain some misses; the rest took a path the programs cannot
+             * see, or are bugs.
              */
             ngx_ebpf_count(SYNACK_STAT_MISSED);
 
@@ -204,7 +204,7 @@ ngx_ebpf_remove(uint64_t cookie, ngx_uint_t consumed)
     if (registered && conn.key.family != 0) {
         rc = bpf_map_lookup_elem(ngx_ebpf_expect_fd, &conn.key, &owner);
 
-        /* only if this connection owns the key: a collision records it too */
+        /* only if this connection still owns the key */
         if (rc == 0 && owner.cookie == cookie) {
             (void) bpf_map_delete_elem(ngx_ebpf_expect_fd, &conn.key);
         }

@@ -364,103 +364,6 @@ synack_count(__u32 id)
 }
 
 
-static __always_inline void
-synack_remove_owned(struct synack_key *key, __u64 cookie)
-{
-    struct synack_expectation  *e;
-
-    e = bpf_map_lookup_elem(&synack_expect, key);
-    if (e && e->cookie == cookie) {
-        bpf_map_delete_elem(&synack_expect, key);
-    }
-}
-
-
-static __always_inline void
-synack_add_expectation(struct synack_key *key, __u64 cookie,
-    struct synack_connection *c)
-{
-    struct synack_expectation  *e, value = {
-        .cookie = cookie
-    };
-
-    if (c->phase != SYNACK_PENDING) {
-        return;
-    }
-
-    /*
-     * The first SYN, finding no key (family 0), records its key before any
-     * expectation names this cookie: synack_in reaches c only through one,
-     * so it always finds the key.  A socket's SYNs pass this hook one at a
-     * time, under its socket lock, so only the first records it.
-     *
-     * A retransmitted SYN builds the same key: the same tuple and ISN, and
-     * SNAT keeps its mapping.  It re-adds the key below if the LRU map
-     * evicted it, or retries it after a collision.  A different key needs
-     * another ISN or SNAT mapping: nginx never reconnects a socket, but
-     * conntrack can lose the entry and re-NAT a later SYN.  Keep the first
-     * key.
-     */
-    if (c->key.family == 0) {
-        c->key = *key;
-
-    } else if (__builtin_memcmp(&c->key, key, sizeof(*key)) != 0) {
-        synack_count(SYNACK_STAT_SECOND_KEY);
-        return;
-    }
-
-    e = bpf_map_lookup_elem(&synack_expect, key);
-    if (e == NULL
-        && bpf_map_update_elem(&synack_expect, key, &value, BPF_NOEXIST))
-    {
-        /* another CPU inserted the key since the lookup */
-        e = bpf_map_lookup_elem(&synack_expect, key);
-        if (e == NULL) {
-            synack_count(SYNACK_STAT_EXPECT_FAILED);
-            return;
-        }
-    }
-
-    if (e && e->cookie != cookie) {
-
-        /*
-         * Another live connection already expects this key: the same tuple
-         * and initial sequence number, which only crafted traffic produces.
-         * The first owner keeps it; a SYN-ACK matching it is captured for
-         * that owner, and this connection misses.  An owner is live while
-         * registered: nginx removes the registration at consume or close,
-         * and synack_in once it stores the capture.
-         */
-        if (bpf_map_lookup_elem(&synack_conn, &e->cookie)) {
-            synack_count(SYNACK_STAT_COLLISION);
-            return;
-        }
-
-        /*
-         * The owner is no longer registered, e.g. its worker crashed and the
-         * LRU map evicted the registration: take the key over as if absent.
-         * The exchange makes the recorded key visible before the new owner,
-         * as the insert above does.  A concurrent synack_in that still
-         * reads the old cookie finds no registration for it and ignores the
-         * key.
-         */
-        __sync_lock_test_and_set(&e->cookie, cookie);
-    }
-
-    /*
-     * synack_in may have claimed c through an earlier copy of the key, and
-     * removed it, before this SYN re-added it.  The fully ordered read
-     * pairs with the claim: either synack_in sees the new copy, or this
-     * sees the claim.
-     */
-    if (__sync_val_compare_and_swap(&c->phase, SYNACK_PENDING, SYNACK_PENDING)
-        != SYNACK_PENDING)
-    {
-        synack_remove_owned(key, cookie);
-    }
-}
-
-
 SEC("netfilter")
 int
 synack_out(struct bpf_nf_ctx *ctx)
@@ -472,6 +375,7 @@ synack_out(struct bpf_nf_ctx *ctx)
     struct sock                 *sk;
     struct synack_key            packet = {}, wire = {};
     struct synack_connection    *c;
+    struct synack_expectation    expect;
 
     /*
      * Every outbound packet in the namespace reaches this hook, and only a
@@ -510,8 +414,15 @@ synack_out(struct bpf_nf_ctx *ctx)
         return SYNACK_NF_ACCEPT;
     }
 
-    /* a claimed connection's retransmitted SYN needs no new expectation */
-    if (c->phase != SYNACK_PENDING) {
+    /*
+     * Only the first SYN adds the key, which is recorded (family not 0)
+     * even if adding it fails.  A socket's SYNs pass this hook one at a
+     * time, under its socket lock.  A retransmission builds the same key,
+     * the same tuple and ISN with the same SNAT mapping, and adds nothing:
+     * a key the LRU map evicted, a failed insert or a re-NAT after
+     * conntrack lost the entry is not retried, and the capture is missed.
+     */
+    if (c->key.family != 0) {
         return SYNACK_NF_ACCEPT;
     }
 
@@ -533,7 +444,20 @@ synack_out(struct bpf_nf_ctx *ctx)
     wire.dport = packet.sport;
     wire.ack = bpf_htonl(bpf_ntohl(seq) + 1);
 
-    synack_add_expectation(&wire, cookie, c);
+    /*
+     * The registration keeps the key for nginx, which removes it at consume
+     * or close.  nginx reads it after connect() has sent this SYN, unless
+     * something like NFQUEUE holds the SYN back; then at worst the key is
+     * left for the LRU map.  The update overwrites a key left behind by an
+     * owner that is gone; two live connections never build the same key,
+     * which needs the same wire tuple and ISN.
+     */
+    c->key = wire;
+    expect.cookie = cookie;
+
+    if (bpf_map_update_elem(&synack_expect, &wire, &expect, BPF_ANY)) {
+        synack_count(SYNACK_STAT_EXPECT_FAILED);
+    }
 
     return SYNACK_NF_ACCEPT;
 }
@@ -605,8 +529,11 @@ synack_in(struct bpf_nf_ctx *ctx)
         return SYNACK_NF_ACCEPT;
     }
 
-    /* the key was recorded before the expectation that led here */
-    synack_remove_owned(&c->key, cookie);
+    /* the key this SYN-ACK matched is the one the connection's SYN added */
+    e = bpf_map_lookup_elem(&synack_expect, &key);
+    if (e && e->cookie == cookie) {
+        bpf_map_delete_elem(&synack_expect, &key);
+    }
 
     /* the capture now carries the result; c must not be used after this */
     bpf_map_delete_elem(&synack_conn, &cookie);
