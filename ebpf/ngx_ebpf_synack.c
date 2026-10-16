@@ -2,12 +2,13 @@
 /*
  * Per-connection side of the upstream SYN-ACK capture.
  *
- * A connection registers its socket cookie before connect() and consumes the
- * captured SYN-ACK headers once the upstream confirms the connection, which
- * also drops the registration; a connection closed before that, e.g. after a
- * failed connect(), drops it at close.  The maps are LRU: what failures leave
- * behind, e.g. after a crashed worker, is evicted when an insert needs the
- * room.  The loader, ngx_ebpf_module.c, creates the maps.
+ * A connection registers its socket cookie before connect().  A captured
+ * SYN-ACK replaces the registration with a capture record in BPF, which the
+ * connection consumes once the upstream confirms the connection.  Consuming,
+ * or closing a connection that never consumed, e.g. after a failed
+ * connect(), removes whatever is left.  The maps are LRU: what failures leave
+ * behind, e.g. after a crashed worker, ages out as inserts need the room.
+ * The loader, ngx_ebpf_module.c, creates the maps.
  */
 
 
@@ -28,8 +29,9 @@ static ngx_uint_t ngx_ebpf_remove(uint64_t cookie, ngx_uint_t consumed);
  * Called by ngx_event_connect_peer() after the socket is created and before
  * connect(), with the location's tcp_save_synack setting.  Registers the
  * socket cookie so that the BPF programs capture this connection's SYN-ACK.
- * Does nothing if capture is off, the addon is not loaded, or the peer is not
- * TCP over IPv4/IPv6.  Failures are counted and never fail the connection.
+ * Does nothing if capture is off, the BPF programs are not loaded, or the
+ * peer is not TCP over IPv4/IPv6.  Failures are counted, a failed insert is
+ * also logged, and none fails the connection.
  */
 void
 ngx_connection_register_synack(ngx_connection_t *c, struct sockaddr *sa,
@@ -85,9 +87,10 @@ ngx_connection_register_synack(ngx_connection_t *c, struct sockaddr *sa,
 
 /*
  * Called by the HTTP upstream once ngx_http_upstream_test_connect() has
- * confirmed the connection (SSL start, request sent), so the SYN-ACK has
- * already passed synack_in.  The first call moves the captured headers into
- * c->saved_synack and drops the registration; later calls do nothing.
+ * confirmed the connection, before the SSL handshake starts or the request
+ * is sent, so the SYN-ACK has already passed synack_in.  The first call
+ * moves the captured headers into c->saved_synack and drops whatever is left
+ * of the registration; later calls do nothing.
  */
 void
 ngx_connection_save_synack(ngx_connection_t *c)
@@ -113,8 +116,9 @@ ngx_connection_save_synack(ngx_connection_t *c)
     rc = bpf_map_lookup_and_delete_elem(ngx_ebpf_capture_fd, &cookie, &record);
 
     /*
-     * The registration has no further use either way: a successful capture
-     * has already deleted it in BPF, and a missed one can no longer happen.
+     * The registration has no further use either way: a capture has already
+     * deleted it in BPF, and without one the SYN-ACK has passed synack_in,
+     * so no capture can follow.
      */
     registered = ngx_ebpf_remove(cookie, 1);
     c->synack_cookie = 0;
@@ -128,8 +132,9 @@ ngx_connection_save_synack(ngx_connection_t *c)
             /*
              * The registration is still pending: the SYN-ACK was not
              * captured.  The EXPECT_FAILED and CAPTURE_FAILED counters
-             * explain some misses; the rest took a path the programs cannot
-             * see, or are bugs.
+             * explain some misses; in the rest the LRU map evicted the
+             * expectation, the packets took a path the programs cannot see,
+             * e.g. NAT to a backend in this namespace, or there is a bug.
              */
             ngx_ebpf_count(SYNACK_STAT_MISSED);
 
@@ -168,8 +173,9 @@ ngx_connection_save_synack(ngx_connection_t *c)
 
 
 /*
- * Called by ngx_close_connection(): removes a registration that was never
- * consumed, e.g. after a failed connect(), with any capture record left.
+ * Called by ngx_close_connection() for a connection that never consumed its
+ * capture, e.g. after a failed connect(): removes the registration, its key
+ * and any capture record left.
  */
 void
 ngx_connection_cleanup_synack(ngx_connection_t *c)
@@ -178,7 +184,7 @@ ngx_connection_cleanup_synack(ngx_connection_t *c)
         return;
     }
 
-    (void) ngx_ebpf_remove(c->synack_cookie, c->synack_processed);
+    (void) ngx_ebpf_remove(c->synack_cookie, 0);
 
     c->synack_cookie = 0;
 }
@@ -186,8 +192,8 @@ ngx_connection_cleanup_synack(ngx_connection_t *c)
 
 /*
  * "consumed" means the connection has already taken (or discarded) its
- * capture record, so only the registration is left to delete.  Returns
- * whether the registration still existed.
+ * capture record, so only the registration and its key are left to delete.
+ * Returns whether the registration still existed.
  */
 static ngx_uint_t
 ngx_ebpf_remove(uint64_t cookie, ngx_uint_t consumed)

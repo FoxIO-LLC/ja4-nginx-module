@@ -450,14 +450,16 @@ synack_out(struct bpf_nf_ctx *ctx)
     wire.ack = bpf_htonl(bpf_ntohl(seq) + 1);
 
     /*
-     * A captured SYN-ACK removes the key and the registration in synack_in.
-     * The registration keeps the key for nginx, which removes it at close
-     * when nothing was captured: refused, timed out, closed early or the
-     * capture insert failed.  nginx reads it after connect() has sent this
-     * SYN, unless something like NFQUEUE holds the SYN back; then at worst
-     * the key is left for the LRU map.  The update overwrites a key left
-     * behind by an owner that is gone; two live connections never build the
-     * same key, which needs the same wire tuple and ISN.
+     * A captured SYN-ACK removes the key and the registration in synack_in,
+     * so nginx typically finds no registration and never reads the key or
+     * synack_expect.  When nothing was captured (refused, timed out, closed
+     * early or the capture insert failed), nginx removes the registration
+     * at close and, through its key, the expectation.  It does so after
+     * connect() has sent this SYN, unless something like NFQUEUE holds the
+     * SYN back; then at worst the key is left for the LRU map.  The update
+     * overwrites a key left behind by an owner that is gone; two live
+     * connections never build the same key, which needs the same wire tuple
+     * and ISN.
      */
     c->key = wire;
     expect.cookie = cookie;

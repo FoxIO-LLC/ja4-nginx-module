@@ -44,11 +44,11 @@ enum synack_phase {
 
 
 /*
- * Nothing here carries a time: an entry lives as long as its socket's
- * registration, which nginx removes at consume or close, and what failures
- * leave behind is evicted by the LRU maps.  A key family of 0 means no SYN
- * has recorded a key yet: nginx registers a zeroed entry, and every parsed
- * key has a family.
+ * Nothing here carries a time: a captured SYN-ACK removes the registration
+ * in synack_in, nginx removes it otherwise at consume or close, and what
+ * failures leave behind ages out of the LRU maps.  A key family of 0 means
+ * no SYN has recorded a key yet: nginx registers a zeroed entry, and every
+ * parsed key has a family.
  */
 struct synack_connection {
     __u32                   phase;      /* BPF atomics need 32 or 64 bits */
