@@ -4,16 +4,15 @@
  * Upstream SYN-ACK capture.
  *
  * synack_out (POSTROUTING, the last hook, after SNAT and OUTPUT DNAT) sees
- * each SYN of a registered socket and records the SYN-ACK it expects: the
+ * a registered socket's first SYN and records the SYN-ACK it expects: the
  * SYN's wire tuple reversed, acknowledging S + 1.  synack_in runs first in
  * PREROUTING, before conntrack undoes NAT, so a reply from another host or
  * namespace arrives in exactly that form, across DNAT/SNAT.  A reply that
  * loops back inside this namespace is un-NATed on its way out and does not
  * match; such local backends are not captured.  nginx does not use TCP Fast
  * Open upstream, so a SYN-ACK that acknowledges SYN data is not expected.
- * synack_in (early PREROUTING) matches incoming SYN-ACKs against those keys
- * and stores the original IP/TCP headers for nginx to consume by socket
- * cookie.
+ * synack_in matches incoming SYN-ACKs against those keys and stores the
+ * original IP/TCP headers for nginx to consume by socket cookie.
  */
 
 
@@ -55,9 +54,10 @@
  * Bounded IP/TCP header reader for Netfilter BPF programs.
  *
  * synack_parse_packet() validates the headers from small stack copies and
- * returns the TCP flags; synack_copy_headers() then copies the complete
- * headers.  Callers check the flags and map state in between, so packets that
- * are not of interest never pay for the full copy.
+ * returns the TCP flags, or 0 if it rejects the packet; synack_out needs no
+ * more.  synack_in checks the flags and the expectation before
+ * synack_copy_headers() copies the complete headers, so packets that are not
+ * of interest never pay for the full copy.
  */
 static __always_inline int
 synack_parse_packet(struct sk_buff *skb, struct synack_key *key,
@@ -158,7 +158,7 @@ synack_parse_packet(struct sk_buff *skb, struct synack_key *key,
                 step = ((__u32) ext[1] + 2) * 4;
 
             } else {
-                return 0;           /* fragment, ESP or unknown */
+                return 0;           /* fragment, ESP, a short AH or unknown */
             }
 
             off += step;
@@ -212,10 +212,11 @@ synack_parse_packet(struct sk_buff *skb, struct synack_key *key,
  * synack_in sees every inbound packet, so this looks first: one probe read
  * covers the IP header and the TCP flags byte for the common layouts, IPv4
  * without options and IPv6 without extension headers, and decides those.
- * Packets too short or malformed for the full parse are turned away here
- * too, so only IPv4 options and IPv6 extension headers, which one read
- * cannot cover, are left to it.  Returns 0 only where the full parse could
- * not yield a SYN-ACK either.
+ * Packets too short for the full parse, or with a bad version or IPv4
+ * header length, are turned away here too.  IPv4 options and IPv6
+ * extension headers, which one read cannot cover, and a failed read are left
+ * to the full parse.  Returns 0 only where the full parse could not yield a
+ * SYN-ACK either.
  */
 static __always_inline int
 synack_candidate(struct sk_buff *skb)
@@ -305,10 +306,11 @@ synack_copy_headers(struct sk_buff *skb, __u8 *bytes, __u32 header_len)
 
 
 /*
- * Capture, consume and close remove entries on the fast path.  What a failure
- * leaves behind (a crashed worker, a missed SYN-ACK) is
- * never looked up again, so the LRU maps evict it first when an insert needs
- * room; no sweep runs, and nothing needs the clock.
+ * Capture, consume and close remove entries on the fast path.  What escapes
+ * them (a crashed worker's entries, a SYN that NFQUEUE releases after close,
+ * an expectation whose registration was evicted) is never looked up again,
+ * so it ages out of the LRU maps as inserts need room; no sweep runs, and
+ * nothing needs the clock.
  */
 struct {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);
@@ -379,8 +381,9 @@ synack_out(struct bpf_nf_ctx *ctx)
 
     /*
      * Every outbound packet in the namespace reaches this hook, and only a
-     * registered socket's SYN matters: two field reads let everything else
-     * through before the map lookup.
+     * registered socket's SYN matters: a few field reads, the socket, its
+     * state and its cookie, let everything else through before the map
+     * lookup.
      */
     sk = ctx->state->sk;
     if (sk == NULL) {
@@ -408,19 +411,21 @@ synack_out(struct bpf_nf_ctx *ctx)
         return SYNACK_NF_ACCEPT;
     }
 
-    /* other applications' sockets with cookies are not registered */
+    /* not registered: another application's, capture off, or evicted */
     c = bpf_map_lookup_elem(&synack_conn, &cookie);
     if (c == NULL) {
         return SYNACK_NF_ACCEPT;
     }
 
     /*
-     * Only the first SYN adds the key, which is recorded (family not 0)
-     * even if adding it fails.  A socket's SYNs pass this hook one at a
-     * time, under its socket lock.  A retransmission builds the same key,
-     * the same tuple and ISN with the same SNAT mapping, and adds nothing:
-     * a key the LRU map evicted, a failed insert or a re-NAT after
-     * conntrack lost the entry is not retried, and the capture is missed.
+     * Only the first SYN that parses adds the key, which is recorded
+     * (family not 0) even if adding it fails.  A socket's SYNs normally
+     * pass this hook one at a time, under its socket lock; SYNs released
+     * by NFQUEUE may race, but build the same key.  A retransmission builds
+     * the same key, the same tuple and ISN with the same SNAT mapping, and
+     * adds nothing: a key the LRU map evicted, a failed insert or a re-NAT
+     * after conntrack lost the entry is not retried, and the capture is
+     * missed.
      */
     if (c->key.family != 0) {
         return SYNACK_NF_ACCEPT;
@@ -445,12 +450,14 @@ synack_out(struct bpf_nf_ctx *ctx)
     wire.ack = bpf_htonl(bpf_ntohl(seq) + 1);
 
     /*
-     * The registration keeps the key for nginx, which removes it at consume
-     * or close.  nginx reads it after connect() has sent this SYN, unless
-     * something like NFQUEUE holds the SYN back; then at worst the key is
-     * left for the LRU map.  The update overwrites a key left behind by an
-     * owner that is gone; two live connections never build the same key,
-     * which needs the same wire tuple and ISN.
+     * A captured SYN-ACK removes the key and the registration in synack_in.
+     * The registration keeps the key for nginx, which removes it at close
+     * when nothing was captured: refused, timed out, closed early or the
+     * capture insert failed.  nginx reads it after connect() has sent this
+     * SYN, unless something like NFQUEUE holds the SYN back; then at worst
+     * the key is left for the LRU map.  The update overwrites a key left
+     * behind by an owner that is gone; two live connections never build the
+     * same key, which needs the same wire tuple and ISN.
      */
     c->key = wire;
     expect.cookie = cookie;
