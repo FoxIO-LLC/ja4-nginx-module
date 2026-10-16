@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# curl stand-in that sends the request with curl_cffi impersonating
+# Chrome 136 (BoringSSL), for tls-ja4-clients.t.
+#
+# curl_cffi runs in a local image built from a pinned Python image and
+# curl_cffi 0.16.2, the version the goldens were recorded with.
+# `--prepare` builds the image and exits.
+#
+# Only what Test::Nginx needs is handled: the URL, -k and -i. Its request
+# headers and other options are ignored, so the request carries the
+# browser's own headers.
+
+set -euo pipefail
+
+image="ja4-nginx-test/curl-cffi:0.16.2"
+
+if ! docker image inspect "$image" >/dev/null 2>&1; then
+    out=$(docker build -q -t "$image" - 2>&1 <<'EOF'
+FROM python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+RUN pip install --no-cache-dir 'curl_cffi==0.16.2'
+EOF
+    ) || { echo "$out" >&2; exit 1; }
+fi
+if [ "${1-}" = --prepare ]; then
+    exit 0
+fi
+
+exec docker run --rm -i --network host "$image" python3 - "$@" <<'EOF'
+import sys
+
+from curl_cffi import requests
+
+url = sys.argv[-1]
+resp = requests.get(url, impersonate="chrome136", verify=False, timeout=10)
+
+if "-i" in sys.argv[1:-1]:
+    version = {1: "1.0", 2: "1.1", 3: "2", 30: "3"}.get(resp.http_version, "1.1")
+    head = f"HTTP/{version} {resp.status_code}\r\n"
+    for name, value in resp.headers.multi_items():
+        head += f"{name}: {value}\r\n"
+    sys.stdout.buffer.write(head.encode() + b"\r\n")
+
+sys.stdout.buffer.write(resp.content)
+EOF

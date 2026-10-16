@@ -101,6 +101,8 @@ The Perl suite (`test/test-nginx/*.t`) checks module loading, variable behavior 
 
 Use nginx built with both patches and HTTP/2 support. Install [Test::Nginx](https://github.com/openresty/test-nginx) with `cpanm`, and build [curlu](https://github.com/lynch1981/curlu) with Go 1.24.0 using the curlu version pinned in [CI](.github/workflows/test-nginx.yaml). Its `curl` wrapper must be on `PATH` for the TLS and JA4T cases.
 
+`tls-ja4-clients.t` checks exact fingerprints from real clients and also needs Docker, which runs its clients.
+
 ```bash
 cpanm --local-lib="$HOME/perl5" Test::Nginx
 export PERL5LIB="$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}"
