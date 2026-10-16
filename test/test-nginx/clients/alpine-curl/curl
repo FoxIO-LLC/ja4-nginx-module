@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# curl from a pinned alpine/curl image (OpenSSL), for tls-ja4-clients.t.
+#
+# Test::Nginx passes --- curl_options as one argument, so options holding
+# spaces are split here. It also adds --http2-prior-knowledge, which would
+# make curl offer only h2 in ALPN; it is dropped so the ClientHello is the
+# one curl sends by default. `--prepare` pulls the image and exits.
+
+set -euo pipefail
+
+image="alpine/curl:8.14.1@sha256:4007cdf991c197c3412b5af737a916a894809273570b0c2bb93d295342fc23a2"
+
+if ! docker image inspect "$image" >/dev/null 2>&1; then
+    docker pull -q "$image" >/dev/null
+fi
+if [ "${1-}" = --prepare ]; then
+    exit 0
+fi
+
+args=()
+for a in "$@"; do
+    case "$a" in
+    --http2-prior-knowledge)
+        ;;
+    -*' '*)
+        read -ra parts <<<"$a"
+        args+=("${parts[@]}")
+        ;;
+    *)
+        args+=("$a")
+        ;;
+    esac
+done
+
+exec docker run --rm --network host "$image" curl "${args[@]}"
