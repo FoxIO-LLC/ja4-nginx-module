@@ -875,3 +875,40 @@ GET /t
 ^ja4h=ge11nn040000_1c4a19f94e87_000000000000_000000000000$
 --- no_error_log
 [error]
+
+
+
+=== TEST 49: ja4h_chrome136_headers
+# The 14 request headers curl_cffi 0.16.2 sends for chrome136, in its
+# order and case (lowercase sec-ch-ua*). raw_request keeps Test::Nginx
+# from adding Connection.
+--- config
+    location /t {
+        # No Connection: close, so nginx must end the connection itself.
+        keepalive_timeout 0;
+        default_type text/plain;
+        return 200 "ja4h=$http_ssl_ja4h\nja4h_string=$http_ssl_ja4h_string\n";
+    }
+--- raw_request eval
+"GET /t HTTP/1.1\r
+Host: localhost\r
+sec-ch-ua: \"Chromium\";v=\"136\", \"Google Chrome\";v=\"136\", \"Not.A/Brand\";v=\"99\"\r
+sec-ch-ua-mobile: ?0\r
+sec-ch-ua-platform: \"macOS\"\r
+Upgrade-Insecure-Requests: 1\r
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36\r
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\r
+Sec-Fetch-Site: none\r
+Sec-Fetch-Mode: navigate\r
+Sec-Fetch-User: ?1\r
+Sec-Fetch-Dest: document\r
+Accept-Encoding: gzip, deflate, br, zstd\r
+Accept-Language: en-US,en;q=0.9\r
+Priority: u=0, i\r
+\r
+"
+--- response_body
+ja4h=ge11nn14enus_4a2973d235de_000000000000_000000000000
+ja4h_string=ge11nn14enus_Host,sec-ch-ua,sec-ch-ua-mobile,sec-ch-ua-platform,Upgrade-Insecure-Requests,User-Agent,Accept,Sec-Fetch-Site,Sec-Fetch-Mode,Sec-Fetch-User,Sec-Fetch-Dest,Accept-Encoding,Accept-Language,Priority__
+--- no_error_log
+[error]
