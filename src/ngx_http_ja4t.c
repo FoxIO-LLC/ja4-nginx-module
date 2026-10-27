@@ -1,6 +1,5 @@
 #include "ngx_http_ja4t.h"
 
-#ifdef NGX_HAVE_TCP_SAVE_SYN
 
 ngx_int_t
 ngx_http_ja4t_parse_syn(const u_char *buf, size_t len, ngx_http_ja4t_t *ja4t)
@@ -140,12 +139,12 @@ ngx_http_ja4t_parse_syn(const u_char *buf, size_t len, ngx_http_ja4t_t *ja4t)
 }
 
 
+#ifdef NGX_HAVE_TCP_SAVE_SYN
+
 ngx_int_t
 ngx_http_ja4t(ngx_connection_t *c, ngx_str_t *out)
 {
-    ngx_http_ja4t_t  ja4t;
-    u_char          *p, *last;
-    size_t           i, size;
+    ngx_int_t  rc;
 
     out->data = NULL;
     out->len = 0;
@@ -166,13 +165,30 @@ ngx_http_ja4t(ngx_connection_t *c, ngx_str_t *out)
         return NGX_OK;
     }
 
-    if (c->saved_syn.len < 20 || c->saved_syn.data == NULL) {
-        return NGX_DECLINED;
+    rc = ngx_http_ja4t_format(c->saved_syn.data, c->saved_syn.len, c->pool,
+                              out);
+    if (rc == NGX_OK) {
+        c->ja4t = *out;
     }
 
-    if (ngx_http_ja4t_parse_syn(c->saved_syn.data, c->saved_syn.len, &ja4t)
-        != NGX_OK)
-    {
+    return rc;
+}
+
+#endif /* NGX_HAVE_TCP_SAVE_SYN */
+
+
+ngx_int_t
+ngx_http_ja4t_format(const u_char *buf, size_t len, ngx_pool_t *pool,
+    ngx_str_t *out)
+{
+    ngx_http_ja4t_t  ja4t;
+    u_char          *p, *last;
+    size_t           i, size;
+
+    out->data = NULL;
+    out->len = 0;
+
+    if (ngx_http_ja4t_parse_syn(buf, len, &ja4t) != NGX_OK) {
         return NGX_DECLINED;
     }
 
@@ -182,7 +198,7 @@ ngx_http_ja4t(ngx_connection_t *c, ngx_str_t *out)
      */
     size = 32 + (size_t) NGX_HTTP_JA4T_MAX_KINDS * 4;
 
-    out->data = ngx_pnalloc(c->pool, size);
+    out->data = ngx_pnalloc(pool, size);
     if (out->data == NULL) {
         return NGX_ERROR;
     }
@@ -244,9 +260,5 @@ ngx_http_ja4t(ngx_connection_t *c, ngx_str_t *out)
 
     out->len = p - out->data;
 
-    c->ja4t = *out;
-
     return NGX_OK;
 }
-
-#endif /* NGX_HAVE_TCP_SAVE_SYN */
