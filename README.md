@@ -137,10 +137,8 @@ Capture that is enabled but cannot be loaded fails nginx startup. `nginx -t` doe
 
 Known limitations:
 
-- Only TCP over IPv4 and IPv6 is captured; Unix socket, UDP and QUIC upstreams are not.
 - DNAT/SNAT to upstreams on other hosts or in other network namespaces works; an upstream in nginx's own namespace reached through NAT (e.g. `REDIRECT`) is not captured.
 - A SYN-ACK rewritten before netfilter (MSS clamping, XDP or TC programs) is fingerprinted as rewritten; asymmetric rewriting (decapsulation, DSR) prevents capture.
-- Some network drivers deliver packet headers in a form the capture cannot read; those requests get an empty value.
 - Non-root workers are verified on Linux 6.8. On older kernels with `kernel.unprivileged_bpf_disabled` set, workers may be refused map access.
 
 ## Testing

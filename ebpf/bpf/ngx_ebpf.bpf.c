@@ -16,6 +16,9 @@
  */
 
 
+/* the kfuncs used are declared below, whatever bpftool put in vmlinux.h */
+#define BPF_NO_KFUNC_PROTOTYPES
+
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_core_read.h>
@@ -50,6 +53,49 @@
 #define SYNACK_MIN_TCP_V6           60      /* IPv6 + TCP headers */
 
 
+extern int bpf_dynptr_from_skb(struct __sk_buff *skb, __u64 flags,
+    struct bpf_dynptr *ptr__uninit) __ksym;
+
+
+/*
+ * A packet from its network header on.  Reads go through an skb dynptr,
+ * which bounds them by the whole packet and copies headers out of page
+ * fragments when a driver left them outside the linear data.
+ */
+struct synack_packet {
+    struct bpf_dynptr  ptr;
+    __u32              offset;      /* of the network header in ptr */
+    __u32              length;      /* bytes from the network header */
+};
+
+
+static __always_inline int
+synack_packet_init(struct sk_buff *skb, struct synack_packet *p)
+{
+    __u32  data, network;
+
+    /* the dynptr starts at skb->data; the network header normally is there */
+    data = skb->data - skb->head;
+    network = skb->network_header;
+
+    if (network < data || network - data > skb->len) {
+        return -1;
+    }
+
+    p->offset = network - data;
+    p->length = skb->len - p->offset;
+
+    return bpf_dynptr_from_skb((struct __sk_buff *) skb, 0, &p->ptr);
+}
+
+
+static __always_inline int
+synack_read(struct synack_packet *p, __u32 off, void *buf, __u32 len)
+{
+    return bpf_dynptr_read(buf, len, &p->ptr, p->offset + off, 0);
+}
+
+
 /*
  * Bounded IP/TCP header reader for Netfilter BPF programs.
  *
@@ -60,40 +106,14 @@
  * of interest never pay for the full copy.
  */
 static __always_inline int
-synack_parse_packet(struct sk_buff *skb, struct synack_key *key,
+synack_parse_packet(struct synack_packet *p, struct synack_key *key,
     __u32 *header_len, __u32 *sequence)
 {
-    int             i;
-    __u8            ip[40], tcp[20], ext[2], next;
-    __u32           offset, tail, off, total, tcp_len, step;
-    __u64           data_offset, packet_length;
-    unsigned char  *head;
+    int    i;
+    __u8   ip[40], tcp[20], ext[2], next;
+    __u32  off, total, tcp_len, step;
 
-    /*
-     * ctx->skb is a BTF pointer: direct CO-RE loads avoid helper calls on
-     * the per-packet path.  Packet bytes still need bounded probe reads.
-     */
-    head = skb->head;
-    offset = skb->network_header;
-    tail = skb->tail;
-    data_offset = skb->data - head;
-    packet_length = skb->len;
-
-    /*
-     * Probe reads do not enforce skb bounds, so check the linear head
-     * explicitly.  Headers outside it are deliberately rejected.
-     */
-    if (offset > tail
-        || tail - offset < 20
-        || data_offset > tail
-        || packet_length + data_offset < offset)
-    {
-        return 0;
-    }
-
-    packet_length += data_offset - offset;
-
-    if (bpf_probe_read_kernel(ip, 20, head + offset)) {
+    if (synack_read(p, 0, ip, 20)) {
         return 0;
     }
 
@@ -112,9 +132,7 @@ synack_parse_packet(struct sk_buff *skb, struct synack_key *key,
 
     } else if (ip[0] >> 4 == 6) {
 
-        if (tail - offset < 40
-            || bpf_probe_read_kernel(ip, 40, head + offset))
-        {
+        if (synack_read(p, 0, ip, 40)) {
             return 0;
         }
 
@@ -137,14 +155,11 @@ synack_parse_packet(struct sk_buff *skb, struct synack_key *key,
              i < SYNACK_IPV6_MAX_EXTENSIONS && next != IPPROTO_TCP;
              i++)
         {
-            if (off > SYNACK_MAX_TCP_OFFSET
-                || off + 2 > tail - offset
-                || off + 2 > total)
-            {
+            if (off > SYNACK_MAX_TCP_OFFSET || off + 2 > total) {
                 return 0;
             }
 
-            if (bpf_probe_read_kernel(ext, 2, head + offset + off)) {
+            if (synack_read(p, off, ext, 2)) {
                 return 0;
             }
 
@@ -173,15 +188,15 @@ synack_parse_packet(struct sk_buff *skb, struct synack_key *key,
         return 0;
     }
 
-    if (total > packet_length
+    /* within total, which is within the packet, so the full copy fits too */
+    if (total > p->length
         || off > SYNACK_MAX_TCP_OFFSET
-        || off + 20 > tail - offset
         || off + 20 > total)
     {
         return 0;
     }
 
-    if (bpf_probe_read_kernel(tcp, 20, head + offset + off)) {
+    if (synack_read(p, off, tcp, 20)) {
         return 0;
     }
 
@@ -189,8 +204,7 @@ synack_parse_packet(struct sk_buff *skb, struct synack_key *key,
 
     if (tcp_len < 20
         || off + tcp_len > SYNACK_MAX_HEADERS
-        || off + tcp_len > total
-        || off + tcp_len > tail - offset)
+        || off + tcp_len > total)
     {
         return 0;
     }
@@ -209,38 +223,28 @@ synack_parse_packet(struct sk_buff *skb, struct synack_key *key,
 
 /*
  * Whether a packet is a SYN-ACK candidate, worth synack_parse_packet().
- * synack_in sees every inbound packet, so this looks first: one probe read
- * covers the IP header and the TCP flags byte for the common layouts, IPv4
- * without options and IPv6 without extension headers, and decides those.
- * Packets too short for the full parse, or with a bad version or IPv4
- * header length, are turned away here too.  IPv4 options and IPv6
- * extension headers, which one read cannot cover, and a failed read are left
- * to the full parse.  Returns 0 only where the full parse could not yield a
- * SYN-ACK either.
+ * synack_in sees every inbound packet, so this looks first: one read covers
+ * the IP header and the TCP flags byte for the common layouts, IPv4 without
+ * options and IPv6 without extension headers, and decides those.  Packets
+ * too short for the full parse, or with a bad version or IPv4 header length,
+ * are turned away here too.  IPv4 options and IPv6 extension headers, which
+ * one read cannot cover, are left to the full parse.  Returns 0 only where
+ * the full parse could not yield a SYN-ACK either.
  */
 static __always_inline int
-synack_candidate(struct sk_buff *skb)
+synack_candidate(struct synack_packet *p)
 {
-    __u8            b[SYNACK_FLAGS_READ_V6], next, flags;
-    __u32           offset, tail;
-    unsigned char  *head;
-
-    head = skb->head;
-    offset = skb->network_header;
-    tail = skb->tail;
+    __u8  b[SYNACK_FLAGS_READ_V6], next, flags;
 
     /* the full parse needs at least an IPv4 and a TCP header */
-    if (offset > tail || tail - offset < SYNACK_MIN_TCP_V4) {
+    if (p->length < SYNACK_MIN_TCP_V4) {
         return 0;
     }
 
-    if (tail - offset >= SYNACK_FLAGS_READ_V6) {
-        if (bpf_probe_read_kernel(b, SYNACK_FLAGS_READ_V6, head + offset)) {
-            return 1;
-        }
-
-    } else if (bpf_probe_read_kernel(b, SYNACK_FLAGS_READ_V4, head + offset)) {
-        return 1;                      /* not invalid: let the full parse try */
+    if (synack_read(p, 0, b, p->length >= SYNACK_FLAGS_READ_V6
+                             ? SYNACK_FLAGS_READ_V6 : SYNACK_FLAGS_READ_V4))
+    {
+        return 0;
     }
 
     if (b[0] >> 4 == 4) {
@@ -270,7 +274,7 @@ synack_candidate(struct sk_buff *skb)
                    || next == SYNACK_IPV6_AH;
         }
 
-        if (tail - offset < SYNACK_MIN_TCP_V6) {
+        if (p->length < SYNACK_MIN_TCP_V6) {
             return 0;                   /* no room for the TCP header */
         }
 
@@ -284,14 +288,12 @@ synack_candidate(struct sk_buff *skb)
 }
 
 
-/* header_len must come from a successful synack_parse_packet() on skb */
+/* header_len must come from a successful synack_parse_packet() on p */
 static __always_inline int
-synack_copy_headers(struct sk_buff *skb, __u8 *bytes, __u32 header_len)
+synack_copy_headers(struct synack_packet *p, __u8 *bytes, __u32 header_len)
 {
-    __u64           read_len;
-    unsigned char  *head;
+    __u32  read_len;
 
-    head = skb->head + skb->network_header;
     read_len = header_len;
 
     /* keep the verifier's bound on the exact register used by the helper */
@@ -301,7 +303,7 @@ synack_copy_headers(struct sk_buff *skb, __u8 *bytes, __u32 header_len)
         return -1;
     }
 
-    return bpf_probe_read_kernel(bytes, read_len, head) ? -1 : 0;
+    return synack_read(p, 0, bytes, read_len) ? -1 : 0;
 }
 
 
@@ -376,6 +378,7 @@ synack_out(struct bpf_nf_ctx *ctx)
     __u64                        cookie;
     struct sock                 *sk;
     struct synack_key            packet = {}, wire = {};
+    struct synack_packet         p;
     struct synack_connection    *c;
     struct synack_expectation    expect;
 
@@ -434,7 +437,11 @@ synack_out(struct bpf_nf_ctx *ctx)
     length = 0;
     seq = 0;
 
-    flags = synack_parse_packet(ctx->skb, &packet, &length, &seq);
+    if (synack_packet_init(ctx->skb, &p)) {
+        return SYNACK_NF_ACCEPT;
+    }
+
+    flags = synack_parse_packet(&p, &packet, &length, &seq);
 
     if ((flags & SYNACK_TCP_FLAGS) != SYNACK_TCP_SYN) {
         return SYNACK_NF_ACCEPT;
@@ -480,6 +487,7 @@ synack_in(struct bpf_nf_ctx *ctx)
     __u32                        zero, length, seq;
     __u64                        cookie;
     struct synack_key            key = {};
+    struct synack_packet         p;
     struct synack_record        *record;
     struct synack_connection    *c;
     struct synack_expectation   *e;
@@ -489,11 +497,11 @@ synack_in(struct bpf_nf_ctx *ctx)
     seq = 0;
 
     /* every inbound packet reaches this hook: stay cheap until a match */
-    if (!synack_candidate(ctx->skb)) {
+    if (synack_packet_init(ctx->skb, &p) || !synack_candidate(&p)) {
         return SYNACK_NF_ACCEPT;
     }
 
-    flags = synack_parse_packet(ctx->skb, &key, &length, &seq);
+    flags = synack_parse_packet(&p, &key, &length, &seq);
 
     if ((flags & SYNACK_TCP_FLAGS) != (SYNACK_TCP_SYN|SYNACK_TCP_ACK)) {
         return SYNACK_NF_ACCEPT;
@@ -511,7 +519,7 @@ synack_in(struct bpf_nf_ctx *ctx)
 
     __builtin_memset(record, 0, sizeof(*record));
 
-    if (synack_copy_headers(ctx->skb, record->headers, length)) {
+    if (synack_copy_headers(&p, record->headers, length)) {
         return SYNACK_NF_ACCEPT;
     }
 
