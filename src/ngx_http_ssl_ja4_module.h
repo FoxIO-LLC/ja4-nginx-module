@@ -408,7 +408,7 @@ static ngx_int_t ngx_http_ssl_ja4h_string(ngx_http_request_t *r, ngx_http_variab
 static ngx_int_t ngx_http_ssl_ja4t(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
 
 // JA4TS
-static ngx_int_t ngx_http_upstream_ja4ts(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
+static ngx_int_t ngx_http_ssl_ja4ts(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
 
 // JA4X
 int ngx_ssl_ja4x(ngx_connection_t *c, ngx_pool_t *pool, ngx_ssl_ja4x_t *ja4x);

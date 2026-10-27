@@ -1,5 +1,5 @@
 # vi:filetype=perl
-# JA4TS of the upstream server: $upstream_ja4ts is the fingerprint of the
+# JA4TS of the upstream server: $http_ssl_ja4ts is the fingerprint of the
 # SYN-ACK nginx received from the upstream peer that served the request.
 # It is not computed for client connections (nginx as the server).
 #
@@ -45,7 +45,7 @@ __DATA__
     location /t {
         tcp_save_synack on;
         default_type text/plain;
-        return 200 "ja4ts=[$upstream_ja4ts]\n";
+        return 200 "ja4ts=[$http_ssl_ja4ts]\n";
     }
 --- request
 GET /t
@@ -66,7 +66,7 @@ up1: window=8192 mss=1460 wscale=7
     }
 --- config
     location /t {
-        add_header X-JA4TS "[$upstream_ja4ts]";
+        add_header X-JA4TS "[$http_ssl_ja4ts]";
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -91,7 +91,7 @@ up1: window=8192 mss=1460 wscale=7
 --- config
     location /t {
         tcp_save_synack off;
-        add_header X-JA4TS "[$upstream_ja4ts]";
+        add_header X-JA4TS "[$http_ssl_ja4ts]";
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -116,7 +116,7 @@ up1: window=8192 mss=1460 wscale=7
     }
 --- config
     location /t {
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -142,7 +142,7 @@ up1: window=8192 mss=1460 wscale=7
     tcp_save_synack on;
 
     location /t {
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -167,11 +167,11 @@ up1: window=8192 mss=1460 wscale=7
 --- config
     location /on {
         tcp_save_synack on;
-        add_header X-JA4TS "[$upstream_ja4ts]";
+        add_header X-JA4TS "[$http_ssl_ja4ts]";
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
     location /off {
-        add_header X-JA4TS "[$upstream_ja4ts]";
+        add_header X-JA4TS "[$http_ssl_ja4ts]";
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request eval
@@ -196,12 +196,12 @@ up1: window=8192 mss=1460 wscale=7
     }
 --- config
     location /on {
-        add_header X-JA4TS "[$upstream_ja4ts]";
+        add_header X-JA4TS "[$http_ssl_ja4ts]";
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
     location /off {
         tcp_save_synack off;
-        add_header X-JA4TS "[$upstream_ja4ts]";
+        add_header X-JA4TS "[$http_ssl_ja4ts]";
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request eval
@@ -224,7 +224,7 @@ up1: window=8192 mss=1460 wscale=7
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -249,7 +249,7 @@ up1: window=8192 mss=1460 wscale=7
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -274,7 +274,7 @@ up1: window=65535 mss=1460 wscale=3
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -297,7 +297,7 @@ up1: window=29200 mss=1460 wscale=0
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -320,7 +320,7 @@ up1: window=8192 mss=9 wscale=7
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -345,7 +345,7 @@ up1: window=8192 mss=1460 wscale=7 reset=timestamp
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -368,7 +368,7 @@ up1: window=8192 mss=1460 wscale=7 reset=sack-perm
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -391,7 +391,7 @@ up1: window=8192 mss=1460 reset=window
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -414,7 +414,7 @@ up1: window=8192 wscale=7 reset=maxseg
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -439,7 +439,7 @@ up1: window=8192 mss=1460 wscale=7
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass https://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -466,7 +466,7 @@ up1: window=8192 mss=1460 wscale=7
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS "[$upstream_ja4ts]" always;
+        add_header X-JA4TS "[$http_ssl_ja4ts]" always;
         proxy_pass https://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -490,9 +490,9 @@ up1: window=8192 mss=1460 wscale=7
 --- config
     location /t {
         tcp_save_synack on;
-        set $early "[$upstream_ja4ts]";
+        set $early "[$http_ssl_ja4ts]";
         add_header X-Early $early;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -510,7 +510,7 @@ X-JA4TS: 8192_2-4-8-1-3_1460_7
 --- synack
 up1: window=8192 mss=1460 wscale=7
 --- http_config
-    log_format ja4ts "ja4ts access: $upstream_ja4ts";
+    log_format ja4ts "ja4ts access: $http_ssl_ja4ts";
     server {
         listen 127.0.0.1:$TEST_NGINX_UP1_PORT;
         location / { return 200 "up1\n"; }
@@ -553,7 +553,7 @@ up2: window=65535 mss=1400 wscale=3
     location /t {
         tcp_save_synack on;
         add_header X-Status $upstream_status;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_next_upstream http_503;
         proxy_pass http://backend;
     }
@@ -574,7 +574,7 @@ X-JA4TS: 65535_2-4-8-1-3_1400_3
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS "[$upstream_ja4ts]" always;
+        add_header X-JA4TS "[$http_ssl_ja4ts]" always;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -603,12 +603,12 @@ up2: window=65535 mss=1400 wscale=3
 --- config
     location /a {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
     location /b {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP2_PORT;
     }
 --- request eval
@@ -640,7 +640,7 @@ up1: window=8192 mss=1460 wscale=7
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_http_version 1.1;
         proxy_set_header Connection "";
         proxy_pass http://backend;
@@ -666,7 +666,7 @@ up1: window=8192 mss=1460 wscale=7
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS "[$upstream_ja4ts]";
+        add_header X-JA4TS "[$http_ssl_ja4ts]";
         proxy_pass http://unix:$TEST_NGINX_SERVROOT/ja4ts-up.sock;
     }
 --- request
@@ -697,12 +697,12 @@ up1: window=8192 mss=1460 wscale=7
     proxy_set_header Connection "";
     location /on {
         tcp_save_synack on;
-        add_header X-JA4TS "[$upstream_ja4ts]";
+        add_header X-JA4TS "[$http_ssl_ja4ts]";
         proxy_pass http://shared_capture;
     }
     location /off {
         tcp_save_synack off;
-        add_header X-JA4TS "[$upstream_ja4ts]";
+        add_header X-JA4TS "[$http_ssl_ja4ts]";
         proxy_pass http://shared_capture;
     }
 --- request eval
@@ -737,12 +737,12 @@ up1: window=8192 mss=1460 wscale=7
     proxy_set_header Connection "";
     location /on {
         tcp_save_synack on;
-        add_header X-JA4TS "[$upstream_ja4ts]";
+        add_header X-JA4TS "[$http_ssl_ja4ts]";
         proxy_pass http://shared_capture;
     }
     location /off {
         tcp_save_synack off;
-        add_header X-JA4TS "[$upstream_ja4ts]";
+        add_header X-JA4TS "[$http_ssl_ja4ts]";
         proxy_pass http://shared_capture;
     }
 --- request eval
@@ -779,7 +779,7 @@ up1: window=8192 mss=1460 wscale=7
     location @fallback {
         tcp_save_synack off;
         default_type text/plain;
-        return 200 "ja4ts=[$upstream_ja4ts]\n";
+        return 200 "ja4ts=[$http_ssl_ja4ts]\n";
     }
 --- request
 GET /t

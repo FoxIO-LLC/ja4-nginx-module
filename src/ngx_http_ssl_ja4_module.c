@@ -53,22 +53,9 @@ static ngx_http_variable_t ngx_http_ssl_ja4_variables_list[] = {
      NULL,
      ngx_http_ssl_ja4t,
      0, 0, 0},
-    {ngx_string("http_ssl_ja4t_string"),
-     NULL,
-     ngx_http_ssl_ja4t,
-     0, 0, 0},
-    {ngx_string("upstream_ja4ts"),
-     NULL,
-     ngx_http_upstream_ja4ts,
-     0, NGX_HTTP_VAR_NOCACHEABLE, 0},
-    /* deprecated aliases of $upstream_ja4ts, kept so existing configs start */
     {ngx_string("http_ssl_ja4ts"),
      NULL,
-     ngx_http_upstream_ja4ts,
-     0, NGX_HTTP_VAR_NOCACHEABLE, 0},
-    {ngx_string("http_ssl_ja4ts_string"),
-     NULL,
-     ngx_http_upstream_ja4ts,
+     ngx_http_ssl_ja4ts,
      0, NGX_HTTP_VAR_NOCACHEABLE, 0},
     {ngx_string("http_ssl_ja4l"),
      NULL,
@@ -1582,8 +1569,8 @@ ngx_http_ssl_ja4t(ngx_http_request_t *r,
  * stays visible after error_page or other internal redirects.
  */
 static ngx_int_t
-ngx_http_upstream_ja4ts(ngx_http_request_t *r,
-                        ngx_http_variable_value_t *v, uintptr_t data)
+ngx_http_ssl_ja4ts(ngx_http_request_t *r,
+                   ngx_http_variable_value_t *v, uintptr_t data)
 {
 #if (NGX_HAVE_EBPF)
     ngx_http_upstream_state_t *states, *state;

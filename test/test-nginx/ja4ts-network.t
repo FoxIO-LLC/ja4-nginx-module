@@ -61,7 +61,7 @@ up1: window=8192 mss=1440 wscale=7
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://[::1]:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -90,7 +90,7 @@ output: ip daddr 127.0.0.1 tcp dport $TEST_NGINX_VIRT_PORT dnat ip to 127.0.0.1:
     location /t {
         tcp_save_synack on;
         add_header X-Upstream $upstream_addr;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_VIRT_PORT;
     }
 --- request
@@ -119,7 +119,7 @@ output: ip daddr 127.0.0.2 tcp dport $TEST_NGINX_UP1_PORT dnat ip to 127.0.0.1
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.2:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -147,7 +147,7 @@ output: ip daddr 192.0.2.10 tcp dport 80 dnat ip to 127.0.0.1:$TEST_NGINX_UP1_PO
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_connect_timeout 2s;
         proxy_pass http://192.0.2.10:80;
     }
@@ -182,7 +182,7 @@ output: ip daddr 127.0.0.1 tcp dport $TEST_NGINX_UP2_PORT dnat ip to 127.0.0.1:$
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP2_PORT;
     }
 --- request
@@ -209,7 +209,7 @@ output: ip daddr 127.0.0.1 tcp dport $TEST_NGINX_VIRT_PORT redirect to :$TEST_NG
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_VIRT_PORT;
     }
 --- request
@@ -238,7 +238,7 @@ postrouting: ip saddr 127.0.0.3 ip daddr 127.0.0.1 tcp dport $TEST_NGINX_UP1_POR
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_bind 127.0.0.3;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
@@ -267,7 +267,7 @@ postrouting: ip saddr 127.0.0.3 ip daddr 127.0.0.1 tcp dport $TEST_NGINX_UP1_POR
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_bind 127.0.0.3;
         proxy_pass http://127.0.0.2:$TEST_NGINX_VIRT_PORT;
     }
@@ -295,7 +295,7 @@ output: ip6 daddr ::1 tcp dport $TEST_NGINX_VIRT_PORT dnat ip6 to [::1]:$TEST_NG
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://[::1]:$TEST_NGINX_VIRT_PORT;
     }
 --- request
@@ -328,12 +328,12 @@ output: ip daddr 127.0.0.1 tcp dport $TEST_NGINX_VIRT_PORT dnat ip to 127.0.0.1:
 --- config
     location /nat {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_VIRT_PORT;
     }
     location /direct {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP2_PORT;
     }
 --- request eval
@@ -363,7 +363,7 @@ tcp sport $TEST_NGINX_UP1_PORT tcp flags & (syn|ack) == syn|ack tcp window set 4
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request
@@ -390,7 +390,7 @@ up1: window=8192 mss=1460 wscale=7
 --- config
     location /t {
         tcp_save_synack on;
-        add_header X-JA4TS $upstream_ja4ts;
+        add_header X-JA4TS $http_ssl_ja4ts;
         proxy_pass http://127.0.0.1:$TEST_NGINX_UP1_PORT;
     }
 --- request

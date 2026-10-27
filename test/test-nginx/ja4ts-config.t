@@ -1,5 +1,5 @@
 # vi:filetype=perl
-# tcp_save_synack configuration and $upstream_ja4ts without capture.
+# tcp_save_synack configuration and $http_ssl_ja4ts without capture.
 #
 # Nothing here loads BPF or needs root. It runs against nginx with the
 # SYN-ACK patch, with or without the ebpf addon; tests that only make sense
@@ -71,12 +71,12 @@ invalid value "yes" in "tcp_save_synack" directive, it must be "on" or "off"
 --- config
     location /default {
         default_type text/plain;
-        return 200 "ja4ts=[$upstream_ja4ts]\n";
+        return 200 "ja4ts=[$http_ssl_ja4ts]\n";
     }
     location /off {
         tcp_save_synack off;
         default_type text/plain;
-        return 200 "ja4ts=[$upstream_ja4ts]\n";
+        return 200 "ja4ts=[$http_ssl_ja4ts]\n";
     }
 --- request eval
 ["GET /default", "GET /off"]

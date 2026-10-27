@@ -11,8 +11,8 @@ The module requires rebuilding nginx with the [ClientHello capture patch](patche
 | JA4 | `$http_ssl_ja4`, `$http_ssl_ja4_string` | TLS client fingerprint; `_string` exposes the unhashed components. |
 | JA4one | `$http_ssl_ja4one` | TLS client fingerprint variant that excludes dynamic extensions from its extension count and hash. |
 | JA4H | `$http_ssl_ja4h`, `$http_ssl_ja4h_string` | HTTP request fingerprint; `_string` exposes header names and cookie data before hashing. |
-| JA4TS | `$upstream_ja4ts` | Upstream TCP SYN-ACK fingerprint of the final upstream attempt. Requires [SYN-ACK capture](#ja4ts). |
-| JA4T | `$http_ssl_ja4t`, `$http_ssl_ja4t_string` | TCP SYN fingerprint; both variables return the same value. Requires [SYN capture](#ja4t). |
+| JA4TS | `$http_ssl_ja4ts` | Upstream TCP SYN-ACK fingerprint of the final upstream attempt. Requires [SYN-ACK capture](#ja4ts). |
+| JA4T | `$http_ssl_ja4t` | TCP SYN fingerprint. Requires [SYN capture](#ja4t). |
 
 JA4 and JA4one require TLS and are empty on plain HTTP. JA4H works with both HTTP and HTTPS; JA4T and JA4TS are independent of TLS.
 
@@ -111,7 +111,7 @@ The addon must be linked statically. It changes the module signature, so `--with
 ```nginx
 http {
     tcp_save_synack on;
-    log_format upstream_fp '$request ja4ts=$upstream_ja4ts';
+    log_format upstream_fp '$request ja4ts=$http_ssl_ja4ts';
 
     server {
         listen 8080;
@@ -131,7 +131,7 @@ http {
 
 `tcp_save_synack` defaults to `off` and can be set at `http`, `server` and `location` level; the setting of the location that proxied the request applies. Stream proxying is not captured.
 
-`$upstream_ja4ts` contains the window size, option kinds, MSS and window scale, such as `64240_2-4-8-1-3_1460_7`, for the final upstream attempt; unlike `$upstream_addr`, it is not a per-attempt list. A reused keepalive connection reports the SYN-ACK of its original handshake. The value is empty when capture is off, the request was not proxied, the connection failed, or no SYN-ACK was captured.
+`$http_ssl_ja4ts` contains the window size, option kinds, MSS and window scale, such as `64240_2-4-8-1-3_1460_7`, for the final upstream attempt; unlike `$upstream_addr`, it is not a per-attempt list. A reused keepalive connection reports the SYN-ACK of its original handshake. The value is empty when capture is off, the request was not proxied, the connection failed, or no SYN-ACK was captured.
 
 Capture that is enabled but cannot be loaded fails nginx startup. `nginx -t` does not check whether the kernel accepts the BPF programs, and turning capture on in a running instance where it was off everywhere requires a restart rather than a reload.
 
