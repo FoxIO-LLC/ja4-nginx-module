@@ -11,8 +11,8 @@ The module requires rebuilding nginx with the [ClientHello capture patch](patche
 | JA4 | `$http_ssl_ja4`, `$http_ssl_ja4_string` | TLS client fingerprint; `_string` exposes the unhashed components. |
 | JA4one | `$http_ssl_ja4one` | TLS client fingerprint variant that excludes dynamic extensions from its extension count and hash. |
 | JA4H | `$http_ssl_ja4h`, `$http_ssl_ja4h_string` | HTTP request fingerprint; `_string` exposes header names and cookie data before hashing. |
-| JA4TS | `$http_ssl_ja4ts` | Upstream TCP SYN-ACK fingerprint of the final upstream attempt. Requires [SYN-ACK capture](#ja4ts). |
 | JA4T | `$http_ssl_ja4t` | TCP SYN fingerprint. Requires [SYN capture](#ja4t). |
+| JA4TS | `$http_ssl_ja4ts` | Upstream TCP SYN-ACK fingerprint of the final upstream attempt. Requires [SYN-ACK capture](#ja4ts). |
 
 JA4 and JA4one require TLS and are empty on plain HTTP. JA4H works with both HTTP and HTTPS; JA4T and JA4TS are independent of TLS.
 
@@ -50,7 +50,10 @@ cd /path/to/nginx-source
 patch -p1 < "$ja4_module_dir/patches/nginx-ssl-save-client-hello.patch"
 # Optional: include this patch if you need JA4T.
 patch -p1 < "$ja4_module_dir/patches/nginx-tcp-save-syn.patch"
+# Optional: include this patch and the ebpf addon below if you need JA4TS.
+patch -p1 < "$ja4_module_dir/patches/nginx-tcp-save-synack.patch"
 ./configure --add-module="$ja4_module_dir" \
+    --add-module="$ja4_module_dir/ebpf" \
     --with-http_ssl_module --with-http_v2_module
 make
 make install
@@ -58,15 +61,20 @@ make install
 
 Add your usual nginx configure options, such as `--prefix`, as needed. Without the SYN capture patch, the module still builds, but JA4T returns no value and the `tcp_save_syn` directive is unavailable.
 
+The `ebpf` addon additionally needs `libbpf-dev` (1.3+), `libelf-dev` and `pkg-config`. It must be linked statically and changes the module signature, so `--with-compat` dynamic modules must be built with the same configuration. Without the SYN-ACK capture patch, JA4TS returns no value and the `tcp_save_synack` directive is unavailable; with the patch but without the addon, `tcp_save_synack on` fails nginx startup.
+
 ## Configuration
 
 Reference the variables in your nginx configuration, for example to log fingerprints. Define the log format inside `http` and select it in your server:
 
 ```nginx
 http {
+    tcp_save_synack on; # Requires the optional SYN-ACK capture patch and ebpf addon.
+
     log_format fingerprints '$remote_addr "$request" '
                             'ja4=$http_ssl_ja4 ja4one=$http_ssl_ja4one '
-                            'ja4h=$http_ssl_ja4h ja4t=$http_ssl_ja4t';
+                            'ja4h=$http_ssl_ja4h ja4t=$http_ssl_ja4t '
+                            'ja4ts=$http_ssl_ja4ts';
 
     server {
         listen 443 ssl;
@@ -74,6 +82,10 @@ http {
         ssl_certificate /path/to/server.crt;
         ssl_certificate_key /path/to/server.key;
         access_log logs/access.log fingerprints;
+
+        location / {
+            proxy_pass http://127.0.0.1:9000; # Your upstream application.
+        }
     }
 }
 ```
@@ -94,42 +106,13 @@ JA4T is empty when nginx is built without `NGX_HAVE_TCP_SAVE_SYN`, capture is of
 
 ### JA4TS
 
-JA4TS fingerprints the upstream server's SYN-ACK for proxied HTTP requests. It requires the optional [SYN-ACK capture patch](patches/nginx-tcp-save-synack.patch) and the `ebpf` addon, but not the SYN capture patch. It needs Linux 6.4+ with kernel BTF and Netfilter BPF support, and libbpf 1.3+. The nginx master must run as root or with `CAP_BPF`, `CAP_PERFMON` and `CAP_NET_ADMIN`; workers need no extra privileges.
-
-Install `libbpf-dev` (1.3+), `libelf-dev` and `pkg-config` in addition to the regular build dependencies. From a source tree with the ClientHello patch applied:
-
-```bash
-patch -p1 < "$ja4_module_dir/patches/nginx-tcp-save-synack.patch"
-./configure --add-module="$ja4_module_dir" \
-    --add-module="$ja4_module_dir/ebpf" \
-    --with-http_ssl_module
-make
-```
-
-The addon must be linked statically. It changes the module signature, so `--with-compat` dynamic modules must be built with the same configuration.
+JA4TS fingerprints the upstream server's SYN-ACK for proxied HTTP requests. It requires the optional [SYN-ACK capture patch](patches/nginx-tcp-save-synack.patch) and the `ebpf` addon (see [Building with nginx](#building-with-nginx)), but not the SYN capture patch. It needs Linux 6.4+ with kernel BTF and Netfilter BPF support. The nginx master must run as root or with `CAP_BPF`, `CAP_PERFMON` and `CAP_NET_ADMIN`; workers need no extra privileges. Enable capture at `http`, `server` or `location` level:
 
 ```nginx
-http {
-    tcp_save_synack on;
-    log_format upstream_fp '$request ja4ts=$http_ssl_ja4ts';
-
-    server {
-        listen 8080;
-        access_log logs/upstream.log upstream_fp;
-
-        location / {
-            proxy_pass http://127.0.0.1:9000;
-        }
-
-        location /uncaptured/ {
-            tcp_save_synack off;
-            proxy_pass http://127.0.0.1:9000;
-        }
-    }
-}
+tcp_save_synack on;
 ```
 
-`tcp_save_synack` defaults to `off` and can be set at `http`, `server` and `location` level; the setting of the location that proxied the request applies. Stream proxying is not captured.
+`tcp_save_synack` defaults to `off`. The setting of the location that proxied the request applies, so `tcp_save_synack off;` in a location excludes its requests. Stream proxying is not captured.
 
 `$http_ssl_ja4ts` contains the window size, option kinds, MSS and window scale, such as `64240_2-4-8-1-3_1460_7`, for the final upstream attempt; unlike `$upstream_addr`, it is not a per-attempt list. A reused keepalive connection reports the SYN-ACK of its original handshake. The value is empty when capture is off, the request was not proxied, the connection failed, or no SYN-ACK was captured.
 
