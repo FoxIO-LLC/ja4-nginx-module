@@ -170,8 +170,8 @@ sudo -E env PATH="$PATH" PERL5LIB="$PERL5LIB" \
 
 JA4TS tests (`test/test-nginx/ja4ts-*.t`) need nginx built with the
 [SYN-ACK capture patch](patches/nginx-tcp-save-synack.patch) and the `ebpf`
-addon, and are not run in CI. `ja4ts-config.t` runs as a normal user; the
-variable and network suites need root:
+addon. `ja4ts-config.t` runs as a normal user; the variable and network
+suites need root:
 
 ```bash
 sudo -E env PATH="$PATH" PERL5LIB="$PERL5LIB" \
