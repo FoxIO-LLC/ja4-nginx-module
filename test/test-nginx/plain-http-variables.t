@@ -6,7 +6,7 @@
 #        JA4H HTTP-layer fields (method, Cookie, Referer, Accept-Language),
 #        JA4H goldens from FoxIO rust/ja4/src/http.rs (comma-join, hash12 zeros)
 #        and FoxIO Wireshark packet-ja4.c http_method_map (method codes).
-# Not covered here: TLS ClientHello / JA4 golden fingerprints (see test/*.py).
+# Not covered here: TLS ClientHello / JA4 golden fingerprints (see tls-*.t).
 #
 # Run (requires nginx built with this module + Test::Nginx):
 #   export TEST_NGINX_BINARY=/path/to/nginx

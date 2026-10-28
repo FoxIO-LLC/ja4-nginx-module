@@ -6,11 +6,5 @@
 *.pem
 nginx_utils/logs
 
-# Python bytecode
-__pycache__/
-*.py[cod]
-*$py.class
-.pytest_cache/
-
 # Test::Nginx runtime tree
 test/test-nginx/servroot/

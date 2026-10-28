@@ -126,7 +126,7 @@ Known limitations:
 
 ## Testing
 
-Run both suites from the repository root. The [CI workflows](.github/workflows) show the build and dependency setup.
+Run the tests from the repository root. The [CI workflows](.github/workflows) show the build and dependency setup.
 
 ### Test::Nginx
 
@@ -162,18 +162,13 @@ sudo -E env PATH="$PATH" PERL5LIB="$PERL5LIB" \
     prove -v test/test-nginx/ja4ts-variables.t test/test-nginx/ja4ts-network.t
 ```
 
-### pytest integration tests
+### Docker smoke test
 
-The Python suite checks TLS fingerprints, ClientHello edge cases and JA4H against golden files in `test/pytest/testdata/`, using containerized curl, Go/uTLS and `curl_cffi` clients.
-
-Start the Quick start environment first. With Python 3, Go 1.24+ and Docker host networking available, run these commands in a Python virtual environment:
+`test/docker-smoke.sh` checks the image from [Quick start](#quick-start): nginx accepts the mounted configuration, and an HTTPS request returns well-formed fingerprints. Start the Quick start environment in the background with `docker compose up -d --build`, then run it from the repository root:
 
 ```bash
-python -m pip install pytest 'curl_cffi==0.16.2'
-python -m pytest
+test/docker-smoke.sh
 ```
-
-The `curl_cffi` pin matches CI so the client fingerprints remain reproducible. To intentionally update golden files, run `python -m pytest --record` and review the resulting changes.
 
 ## Questions
 
