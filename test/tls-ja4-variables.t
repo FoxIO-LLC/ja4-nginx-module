@@ -4,7 +4,7 @@
 # Client: Test::Nginx HTTP/2 curl path. The `curl` on PATH must be
 # curlu's bash curl wrapper (needs --utls-alpn-hex / --utls-alpn-none / --resolve).
 # Requires nginx with http_ssl_module + http_v2_module, and
-# test/test-nginx/certs/server.{crt,key}. TEST 25 also needs --with-debug.
+# test/certs/server.{crt,key}. TEST 25 also needs --with-debug.
 # SNI cases use --resolve so the URL host is example.test (JA4 'd') while
 # TCP stays on 127.0.0.1.
 #
@@ -35,11 +35,11 @@
 # Run:
 #   export TEST_NGINX_BINARY=/path/to/nginx
 #   export PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}
-#   prove -v test/test-nginx/tls-ja4-variables.t
+#   prove -v test/tls-ja4-variables.t
 
 BEGIN {
     use File::Spec;
-    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/test-nginx/servroot');
+    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/servroot');
     $ENV{TEST_NGINX_USE_HTTP2} = 1;
 }
 
@@ -52,8 +52,8 @@ no_root_location();
 $ENV{TEST_NGINX_SSL_PORT} ||= server_port() + 10;
 server_port_for_client($ENV{TEST_NGINX_SSL_PORT});
 
-my $crt = File::Spec->rel2abs('test/test-nginx/certs/server.crt');
-my $key = File::Spec->rel2abs('test/test-nginx/certs/server.key');
+my $crt = File::Spec->rel2abs('test/certs/server.crt');
+my $key = File::Spec->rel2abs('test/certs/server.key');
 my $ssl_port = $ENV{TEST_NGINX_SSL_PORT};
 
 add_block_preprocessor(sub {
@@ -783,7 +783,7 @@ ja4one=t13i1514h2_8daaf6152771_36142f6fd6ef$
 
 
 === TEST 32: every_variable_over_tls_h2
-# Every module variable in one HTTPS request, like nginx_utils/nginx.conf.
+# Every module variable in one HTTPS request, like docker/nginx.conf.
 # JA4S and JA4X are not implemented yet and stay empty; JA4L reports no
 # timing and TTL 0, so 0_0_64. JA4T and JA4TS are empty without SYN or
 # SYN-ACK capture. Over HTTP/2 JA4H is ge20 and counts the host header

@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# Smoke test for the Docker image started by `docker compose up -d`.
+# Smoke test for the Docker image started by `docker compose up -d` in
+# this directory. It can be run from any directory.
 #
 # Checks that the image's nginx accepts the mounted configuration and that
 # the module reports fingerprints at runtime. Exact fingerprints are covered
-# by test/test-nginx; here the host curl's TLS stack varies, so only the
-# shape of each value is checked.
+# by the Test::Nginx suite in test/; here the host curl's TLS stack varies,
+# so only the shape of each value is checked.
 set -euo pipefail
 
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+
 fail() {
-	printf 'docker-smoke: %s\n' "$*" >&2
+	printf 'smoke-test: %s\n' "$*" >&2
 	exit 1
 }
 
@@ -18,7 +21,7 @@ docker compose exec -T ja4-nginx /etc/nginx/sbin/nginx -t
 body="$(curl -fsSk --retry 30 --retry-delay 1 --retry-all-errors https://localhost/)"
 printf '%s\n' "${body}"
 
-# Prints the value of a "Label: value" line of nginx_utils/nginx.conf's body.
+# Prints the value of a "Label: value" line of nginx.conf's body.
 field() {
 	printf '%s\n' "${body}" | sed -n "s/^ *$1: //p"
 }
@@ -30,14 +33,14 @@ expect() {
 		|| fail "${label} '${value}' does not match ${regex}"
 }
 
-# localhost sends SNI (d); nginx_utils/nginx.conf serves only HTTP/1.1.
+# localhost sends SNI (d); nginx.conf serves only HTTP/1.1.
 expect 'JA4' '^t1[23]d[0-9]{4}(h1|h2)_[0-9a-f]{12}_[0-9a-f]{12}$'
 expect 'JA4 String' '^t1[23]d[0-9]{4}(h1|h2)_[0-9a-f,]+_[0-9a-f,]+_[0-9a-f,]+$'
 expect 'JA4one' '^t1[23]d[0-9]{4}(h1|h2)_[0-9a-f]{12}_[0-9a-f]{12}$'
 expect 'JA4H' '^ge11nn[0-9]{2}0000_[0-9a-f]{12}_0{12}_0{12}$'
 expect 'JA4H String' '^ge11nn[0-9]{2}0000_Host,'
 expect 'JA4L' '^0_0_64$'
-# Capture is off in nginx_utils/nginx.conf; JA4S and JA4X are not implemented.
+# Capture is off in nginx.conf; JA4S and JA4X are not implemented.
 for label in 'JA4S' 'JA4S String' 'JA4T' 'JA4TS' 'JA4X'; do
 	expect "${label}" '^$'
 done
@@ -48,4 +51,4 @@ done
 [[ "$(curl -fsS http://localhost/)" == ok ]] \
 	|| fail 'plain HTTP server did not return ok'
 
-printf 'docker-smoke: ok\n'
+printf 'smoke-test: ok\n'

@@ -2,7 +2,7 @@
 # Exact JA4 goldens from real TLS client implementations, as opposed to the
 # uTLS parrots in tls-ja4-variables.t.
 #
-# `--- client` names a directory under test/test-nginx/clients/ whose `curl`
+# `--- client` names a directory under test/clients/ whose `curl`
 # Test::Nginx runs for that block. Both run in Docker with host networking:
 #   alpine-curl  curl 8.14.1 + OpenSSL from a pinned alpine/curl image
 #   curl-cffi    curl_cffi 0.16.2 impersonating chrome136 (BoringSSL), in an
@@ -10,17 +10,17 @@
 # The goldens depend on these exact client versions; update them together.
 #
 # Requires nginx with http_ssl_module + http_v2_module, and
-# test/test-nginx/certs/server.{crt,key}. Blocks that send SNI connect to
+# test/certs/server.{crt,key}. Blocks that send SNI connect to
 # localhost (JA4 'd'); the rest connect to 127.0.0.1 (JA4 'i').
 #
 # Run:
 #   export TEST_NGINX_BINARY=/path/to/nginx
 #   export PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}
-#   prove -v test/test-nginx/tls-ja4-clients.t
+#   prove -v test/tls-ja4-clients.t
 
 BEGIN {
     use File::Spec;
-    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/test-nginx/servroot');
+    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/servroot');
     $ENV{TEST_NGINX_USE_HTTP2} = 1;
 }
 
@@ -34,9 +34,9 @@ no_root_location();
 $ENV{TEST_NGINX_SSL_PORT} ||= server_port() + 10;
 server_port_for_client($ENV{TEST_NGINX_SSL_PORT});
 
-my $crt = File::Spec->rel2abs('test/test-nginx/certs/server.crt');
-my $key = File::Spec->rel2abs('test/test-nginx/certs/server.key');
-my $clients = File::Spec->rel2abs('test/test-nginx/clients');
+my $crt = File::Spec->rel2abs('test/certs/server.crt');
+my $key = File::Spec->rel2abs('test/certs/server.key');
+my $clients = File::Spec->rel2abs('test/clients');
 my $ssl_port = $ENV{TEST_NGINX_SSL_PORT};
 my $path = $ENV{PATH};
 

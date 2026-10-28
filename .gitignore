@@ -4,7 +4,9 @@
 *.crt
 *.key
 *.pem
-nginx_utils/logs
+docker/logs
 
 # Test::Nginx runtime tree
-test/test-nginx/servroot/
+test/servroot/
+# Test::Nginx ignores TEST_NGINX_SERVROOT under TEST_NGINX_RANDOMIZE
+t/

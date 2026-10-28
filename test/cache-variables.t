@@ -1,19 +1,19 @@
 # vi:filetype=perl
 # Variable cache tests for ngx_http_ssl_ja4_module.
 # Requires Test::Nginx, nginx built with this module, tcp_save_syn support,
-# --with-debug, --with-http_v2_module and test/test-nginx/certs/server.{crt,key}.
+# --with-debug, --with-http_v2_module and test/certs/server.{crt,key}.
 # The `curl` on PATH must be a real curl with HTTP/2; the curlu wrapper
 # rejects the extra URL in TEST 2.
 # No root privileges needed.
 # No crafted SYN packets needed.
 #
 # Run with TEST_NGINX_BINARY pointing to nginx and PERL5LIB set as needed:
-#   prove -v test/test-nginx/cache-variables.t
+#   prove -v test/cache-variables.t
 
 BEGIN {
     use File::Spec;
-    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/test-nginx/servroot');
-    $ENV{TEST_NGINX_CERT_DIR} ||= File::Spec->rel2abs('test/test-nginx/certs');
+    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/servroot');
+    $ENV{TEST_NGINX_CERT_DIR} ||= File::Spec->rel2abs('test/certs');
 }
 
 use Test::Nginx::Socket 'no_plan';

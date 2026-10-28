@@ -18,14 +18,15 @@ JA4 and JA4one require TLS and are empty on plain HTTP. JA4H works with both HTT
 
 ## Quick start
 
-The root [Dockerfile](Dockerfile) and [Compose configuration](docker-compose.yaml) provide a development/reference environment. Make sure Docker Compose and OpenSSL are installed, and ports 80 and 443 are available.
+The [Dockerfile](docker/Dockerfile) and [Compose configuration](docker/compose.yaml) in [docker/](docker) provide a development/reference environment. Make sure Docker Compose and OpenSSL are installed, and ports 80 and 443 are available.
 
-From the repository root, generate the local test certificate and key (neither is committed), then start nginx:
+From the `docker` directory, generate the local test certificate and key (neither is committed), then start nginx:
 
 ```bash
-mkdir -p nginx_utils/logs
+cd docker
+mkdir -p logs
 openssl req -x509 -nodes -newkey rsa:2048 \
-    -keyout nginx_utils/server.key -out nginx_utils/server.crt \
+    -keyout server.key -out server.crt \
     -days 30 -subj "/CN=localhost"
 docker compose up --build
 ```
@@ -36,11 +37,11 @@ In another terminal, request the fingerprint response:
 curl -k https://localhost/
 ```
 
-`-k` accepts the self-signed test certificate. The response uses [nginx_utils/nginx.conf](nginx_utils/nginx.conf); JA4T is empty until SYN capture is enabled. Stop the environment with `docker compose down`.
+`-k` accepts the self-signed test certificate. The response uses [docker/nginx.conf](docker/nginx.conf); JA4T is empty until SYN capture is enabled. Stop the environment with `docker compose down` in the same directory.
 
 ## Building with nginx
 
-Install a C compiler, `make`, `patch`, and the OpenSSL, PCRE and zlib development libraries, then unpack the nginx source. See the [Dockerfile](Dockerfile) for a complete reference build and dependency versions.
+Install a C compiler, `make`, `patch`, and the OpenSSL, PCRE and zlib development libraries, then unpack the nginx source. See the [Dockerfile](docker/Dockerfile) for a complete reference build and dependency versions.
 
 Starting from this repository's root, apply the patches to the nginx source tree before configuring:
 
@@ -126,11 +127,11 @@ Known limitations:
 
 ## Testing
 
-Run the tests from the repository root. The [CI workflows](.github/workflows) show the build and dependency setup.
+Run the Test::Nginx suite from the repository root. The [CI workflows](.github/workflows) show the build and dependency setup.
 
 ### Test::Nginx
 
-The Perl suite (`test/test-nginx/*.t`) checks module loading, variable behavior on plain HTTP, JA4H request fingerprints, TLS ClientHello cases and JA4T/JA4TS TCP fingerprints.
+The Perl suite (`test/*.t`) checks module loading, variable behavior on plain HTTP, JA4H request fingerprints, TLS ClientHello cases and JA4T/JA4TS TCP fingerprints.
 
 Use nginx built with both patches and HTTP/2 support. Install [Test::Nginx](https://github.com/openresty/test-nginx) with `cpanm`, and build [curlu](https://github.com/lynch1981/curlu) with Go 1.24.0 using the curlu version pinned in [CI](.github/workflows/test-nginx.yaml). Its `curl` wrapper must be on `PATH` for the TLS and JA4T cases.
 
@@ -141,17 +142,17 @@ cpanm --local-lib="$HOME/perl5" Test::Nginx
 export PERL5LIB="$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}"
 export TEST_NGINX_BINARY=/path/to/nginx/objs/nginx
 export PATH="/path/to/curlu:$PATH"
-prove -v test/test-nginx/*.t
+prove -v test/*.t
 ```
 
 JA4T tests need Linux, root, `ip` and `nft`; they are skipped without root or curlu. Run them with:
 
 ```bash
 sudo -E env PATH="$PATH" PERL5LIB="$PERL5LIB" \
-    TEST_NGINX_BINARY="$TEST_NGINX_BINARY" prove -v test/test-nginx/ja4t-variables.t
+    TEST_NGINX_BINARY="$TEST_NGINX_BINARY" prove -v test/ja4t-variables.t
 ```
 
-JA4TS tests (`test/test-nginx/ja4ts-*.t`) need nginx built with the
+JA4TS tests (`test/ja4ts-*.t`) need nginx built with the
 [SYN-ACK capture patch](patches/nginx-tcp-save-synack.patch) and the `ebpf`
 addon. `ja4ts-config.t` runs as a normal user; the variable and network
 suites need root:
@@ -159,15 +160,15 @@ suites need root:
 ```bash
 sudo -E env PATH="$PATH" PERL5LIB="$PERL5LIB" \
     TEST_NGINX_BINARY="$TEST_NGINX_BINARY" \
-    prove -v test/test-nginx/ja4ts-variables.t test/test-nginx/ja4ts-network.t
+    prove -v test/ja4ts-variables.t test/ja4ts-network.t
 ```
 
 ### Docker smoke test
 
-`test/docker-smoke.sh` checks the image from [Quick start](#quick-start): nginx accepts the mounted configuration, and an HTTPS request returns well-formed fingerprints. Start the Quick start environment in the background with `docker compose up -d --build`, then run it from the repository root:
+`docker/smoke-test.sh` checks the image from [Quick start](#quick-start): nginx accepts the mounted configuration, and an HTTPS request returns well-formed fingerprints. Start the Quick start environment in the background with `docker compose up -d --build`, then run:
 
 ```bash
-test/docker-smoke.sh
+docker/smoke-test.sh
 ```
 
 ## Questions

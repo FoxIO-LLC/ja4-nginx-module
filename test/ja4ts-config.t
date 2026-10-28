@@ -6,9 +6,9 @@
 # for one of those builds skip themselves. Capture itself is covered by the
 # privileged ja4ts-variables.t and ja4ts-network.t.
 #
-#   TEST_NGINX_BINARY=/path/to/nginx prove -v test/test-nginx/ja4ts-config.t
+#   TEST_NGINX_BINARY=/path/to/nginx prove -v test/ja4ts-config.t
 #
-# TEST_NGINX_SERVROOT is optional; defaults to test/test-nginx/servroot below.
+# TEST_NGINX_SERVROOT is optional; defaults to test/servroot below.
 
 use FindBin;
 use lib "$FindBin::Bin/lib";
@@ -16,7 +16,7 @@ use Ja4tsCapture;
 
 BEGIN {
     use File::Spec;
-    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/test-nginx/servroot');
+    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/servroot');
     Ja4tsCapture::require_nginx_binary();
 }
 
