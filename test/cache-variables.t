@@ -2,8 +2,7 @@
 # Variable cache tests for ngx_http_ssl_ja4_module.
 # Requires Test::Nginx, nginx built with this module, tcp_save_syn support,
 # --with-debug, --with-http_v2_module and test/certs/server.{crt,key}.
-# The `curl` on PATH must be a real curl with HTTP/2; the curlu wrapper
-# rejects the extra URL in TEST 2.
+# The `curl` on PATH may be a real curl with HTTP/2 or the curlu wrapper.
 # No root privileges needed.
 # No crafted SYN packets needed.
 #

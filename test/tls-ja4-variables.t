@@ -125,7 +125,7 @@ GET /t
 
 
 === TEST 3: golang_default_ja4
-# HelloGolang is Go 1.24 crypto/tls (curlu pin), ALPN http/1.1 only.
+# HelloGolang is Go 1.24 crypto/tls (curlu pin), ALPN h2, http/1.1.
 # IP and no session cache: 10 extensions (0005,000a,000b,000d,0010,
 # 0012,0017,002b,0033,ff01).
 --- config
@@ -137,7 +137,7 @@ GET /t
 --- request
 GET /t
 --- response_body_like chomp
-^ja4=t13i1310h1_f57a46bbacb6_e7c285222651$
+^ja4=t13i1310h2_f57a46bbacb6_e7c285222651$
 --- no_error_log
 [error]
 
