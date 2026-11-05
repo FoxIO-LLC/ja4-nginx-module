@@ -15,11 +15,7 @@
 
             JA4T: 
 
-            JA4T String: 
-
             JA4TS: 
-
-            JA4TS String: 
 
             JA4X: 
 

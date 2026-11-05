@@ -34,6 +34,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # First, so the tests never run a stale BPF object.
+      - name: Check the committed BPF skeleton
+        run: sh ebpf/gen-skel.sh --check
+
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
@@ -48,7 +52,10 @@ jobs:
             git \
             patch \
             iproute2 \
-            nftables
+            nftables \
+            libbpf-dev \
+            libelf-dev \
+            pkg-config
           sudo cpanm --notest Test::Nginx
 
       # Ubuntu's apt curl lacks HTTP/3; the snap build has it.
@@ -106,6 +113,8 @@ jobs:
             < "${GITHUB_WORKSPACE}/patches/nginx-ssl-save-client-hello.patch"
           patch -p1 -d "${nginx_src}" \
             < "${GITHUB_WORKSPACE}/patches/nginx-tcp-save-syn.patch"
+          patch -p1 -d "${nginx_src}" \
+            < "${GITHUB_WORKSPACE}/patches/nginx-tcp-save-synack.patch"
 
       - name: Build nginx with JA4 module (${{ matrix.name }})
         run: |
@@ -118,6 +127,7 @@ jobs:
             --with-debug \
             --with-cc-opt="-O1 -g -fno-omit-frame-pointer" \
             --add-module="${GITHUB_WORKSPACE}" \
+            --add-module="${GITHUB_WORKSPACE}/ebpf" \
             --with-http_ssl_module \
             --with-http_v2_module \
             --with-http_v3_module \
@@ -136,7 +146,7 @@ jobs:
         run: |
           set -euo pipefail
           export TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx"
-          prove -v $(ls test/test-nginx/*.t | grep -Ev '/(ja4t|tls-ja4|http3-ja4)-variables\.t$')
+          prove -v $(ls test/test-nginx/*.t | grep -Ev '/(ja4t|ja4ts|tls-ja4|http3-ja4)-variables\.t$|/ja4ts-network\.t$')
 
       - name: Run HTTP/3 JA4 tests (snap curl)
         run: |
@@ -152,6 +162,17 @@ jobs:
           export TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx"
           prove -v test/test-nginx/tls-ja4-variables.t
 
+      # Root for the private network namespace, nft and BPF capture.
+      - name: Run JA4TS tests (root)
+        run: |
+          set -euo pipefail
+          sudo -E env \
+            PATH="${PATH}" \
+            TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx" \
+            ASAN_OPTIONS="${ASAN_OPTIONS}" \
+            HWASAN_OPTIONS="${HWASAN_OPTIONS}" \
+            prove -v test/test-nginx/ja4ts-variables.t test/test-nginx/ja4ts-network.t
+
       # Run last: curlu crafts SYN packets using root-only network operations.
       - name: Run JA4T tests (root)
         run: |
@@ -163,3 +184,4 @@ jobs:
             ASAN_OPTIONS="${ASAN_OPTIONS}" \
             HWASAN_OPTIONS="${HWASAN_OPTIONS}" \
             prove -v test/test-nginx/ja4t-variables.t
+

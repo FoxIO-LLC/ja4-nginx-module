@@ -1,0 +1,27 @@
+ngx_addon_name=ngx_ebpf_module
+
+# The BPF programs are embedded in the committed ngx_ebpf.skel.h (see
+# gen-skel.sh), so building nginx needs libbpf but no BPF toolchain.
+
+if test "$ngx_module_link" = DYNAMIC; then
+    echo "ebpf addon: tcp_save_synack core support must be linked statically"
+    exit 1
+fi
+if ! pkg-config --atleast-version=1.3.0 libbpf; then
+    echo "ebpf addon: requires libbpf development files version 1.3 or newer"
+    exit 1
+fi
+
+ngx_module_type=CORE
+ngx_module_name=ngx_ebpf_module
+ngx_module_srcs="$ngx_addon_dir/ngx_ebpf_module.c \
+                 $ngx_addon_dir/ngx_ebpf_synack.c"
+ngx_module_incs="$ngx_addon_dir"
+ngx_module_deps="$ngx_addon_dir/ngx_ebpf_module.h \
+                 $ngx_addon_dir/ngx_ebpf_synack.h \
+                 $ngx_addon_dir/ngx_ebpf.h \
+                 $ngx_addon_dir/ngx_ebpf.skel.h"
+ngx_module_libs="$(pkg-config --libs libbpf)"
+. auto/module
+
+have=NGX_HAVE_EBPF . auto/have

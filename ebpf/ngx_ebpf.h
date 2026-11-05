@@ -1,0 +1,90 @@
+
+/*
+ * Types and limits shared by the nginx side (ngx_ebpf_module.c, the loader,
+ * and ngx_ebpf_synack.c) and the BPF programs (bpf/ngx_ebpf.bpf.c).  The map
+ * layouts are a private contract: both sides must be built from the same
+ * revision.
+ */
+
+
+#ifndef _NGX_EBPF_H_INCLUDED_
+#define _NGX_EBPF_H_INCLUDED_
+
+
+#ifndef __VMLINUX_H__
+#include <linux/types.h>
+#endif
+
+
+#define SYNACK_MAX_HEADERS      256
+#define SYNACK_CONNECTIONS      65536   /* and one expectation key each */
+
+
+/*
+ * The family is native-endian; addresses, ports and the ACK are in network
+ * order.  IPv4 uses the first four address bytes.  All remaining bytes,
+ * including pad, are zero, so keys compare as plain memory.
+ */
+struct synack_key {
+    __u16                   family;
+    __u8                    protocol;
+    __u8                    pad;
+    __u8                    src[16];
+    __u8                    dst[16];
+    __be16                  sport;
+    __be16                  dport;
+    __be32                  ack;
+};
+
+
+enum synack_phase {
+    SYNACK_PENDING = 0,
+    SYNACK_CLAIMED
+};
+
+
+/*
+ * Nothing here carries a time: a captured SYN-ACK removes the registration
+ * in synack_in, nginx removes it otherwise at consume or close, and what
+ * failures leave behind ages out of the LRU maps.  A key family of 0 means
+ * no SYN has recorded a key yet: nginx registers a zeroed entry, and every
+ * parsed key has a family.
+ */
+struct synack_connection {
+    __u32                   phase;      /* BPF atomics need 32 or 64 bits */
+    struct synack_key       key;        /* first SYN wire tuple, reversed */
+};
+
+
+struct synack_expectation {
+    __u64                   cookie;     /* the owner */
+};
+
+
+struct synack_record {
+    __u32                   length;
+    __u8                    headers[SYNACK_MAX_HEADERS];
+};
+
+
+/*
+ * Indexes into the synack_stats array; the tests read them by number, so new
+ * counters are appended.  The maps are LRU and evict instead of failing when
+ * full, so EXPECT_FAILED and CAPTURE_FAILED count only rare insert failures,
+ * such as an LRU without a free node.
+ */
+enum synack_stat {
+    SYNACK_STAT_EXPECT_FAILED = 0,
+    SYNACK_STAT_CAPTURE_FAILED,
+    SYNACK_STAT_CAPTURED,
+    SYNACK_STAT_REGISTER_FAILED,
+    SYNACK_STAT_ALLOC_FAILED,
+    SYNACK_STAT_HANDOFF_ERROR,
+    SYNACK_STAT_INVALID_RECORD,
+    SYNACK_STAT_EVICTED,                /* registration or capture evicted */
+    SYNACK_STAT_MISSED,                 /* registered, but nothing captured */
+    SYNACK_STAT_COUNT                   /* sentinel: number of counters */
+};
+
+
+#endif /* _NGX_EBPF_H_INCLUDED_ */

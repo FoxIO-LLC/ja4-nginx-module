@@ -2,7 +2,7 @@
 
 An nginx module exposing JA4+ fingerprints as nginx variables for logging and request handling.
 
-The module requires rebuilding nginx with the [ClientHello capture patch](patches/nginx-ssl-save-client-hello.patch), which saves the raw TLS ClientHello for the module to parse. The patch applies to nginx 1.26 and later. JA4T additionally requires the [SYN capture patch](patches/nginx-tcp-save-syn.patch).
+The module requires rebuilding nginx with the [ClientHello capture patch](patches/nginx-ssl-save-client-hello.patch), which saves the raw TLS ClientHello for the module to parse. The patch applies to nginx 1.26 and later. JA4T additionally requires the [SYN capture patch](patches/nginx-tcp-save-syn.patch). JA4TS uses the independent [SYN-ACK capture patch](patches/nginx-tcp-save-synack.patch) and optional `ebpf` core addon.
 
 ## Supported fingerprints
 
@@ -11,9 +11,10 @@ The module requires rebuilding nginx with the [ClientHello capture patch](patche
 | JA4 | `$http_ssl_ja4`, `$http_ssl_ja4_string` | TLS client fingerprint; `_string` exposes the unhashed components. |
 | JA4one | `$http_ssl_ja4one` | TLS client fingerprint variant that excludes dynamic extensions from its extension count and hash. |
 | JA4H | `$http_ssl_ja4h`, `$http_ssl_ja4h_string` | HTTP request fingerprint; `_string` exposes header names and cookie data before hashing. |
-| JA4T | `$http_ssl_ja4t`, `$http_ssl_ja4t_string` | TCP SYN fingerprint; both variables return the same value. Requires [SYN capture](#ja4t). |
+| JA4T | `$http_ssl_ja4t` | TCP SYN fingerprint. Requires [SYN capture](#ja4t). |
+| JA4TS | `$http_ssl_ja4ts` | Upstream TCP SYN-ACK fingerprint of the final upstream attempt. Requires [SYN-ACK capture](#ja4ts). |
 
-JA4 and JA4one require TLS and are empty on plain HTTP. JA4H works with both HTTP and HTTPS; JA4T is independent of TLS.
+JA4 and JA4one require TLS and are empty on plain HTTP. JA4H works with both HTTP and HTTPS; JA4T and JA4TS are independent of TLS.
 
 ## Quick start
 
@@ -49,7 +50,10 @@ cd /path/to/nginx-source
 patch -p1 < "$ja4_module_dir/patches/nginx-ssl-save-client-hello.patch"
 # Optional: include this patch if you need JA4T.
 patch -p1 < "$ja4_module_dir/patches/nginx-tcp-save-syn.patch"
+# Optional: include this patch and the ebpf addon below if you need JA4TS.
+patch -p1 < "$ja4_module_dir/patches/nginx-tcp-save-synack.patch"
 ./configure --add-module="$ja4_module_dir" \
+    --add-module="$ja4_module_dir/ebpf" \
     --with-http_ssl_module --with-http_v2_module
 make
 make install
@@ -57,15 +61,20 @@ make install
 
 Add your usual nginx configure options, such as `--prefix`, as needed. Without the SYN capture patch, the module still builds, but JA4T returns no value and the `tcp_save_syn` directive is unavailable.
 
+The `ebpf` addon additionally needs `libbpf-dev` (1.3+), `libelf-dev` and `pkg-config`. It must be linked statically and changes the module signature, so `--with-compat` dynamic modules must be built with the same configuration. Without the SYN-ACK capture patch, JA4TS returns no value and the `tcp_save_synack` directive is unavailable; with the patch but without the addon, `tcp_save_synack on` fails nginx startup.
+
 ## Configuration
 
 Reference the variables in your nginx configuration, for example to log fingerprints. Define the log format inside `http` and select it in your server:
 
 ```nginx
 http {
+    tcp_save_synack on; # Requires the optional SYN-ACK capture patch and ebpf addon.
+
     log_format fingerprints '$remote_addr "$request" '
                             'ja4=$http_ssl_ja4 ja4one=$http_ssl_ja4one '
-                            'ja4h=$http_ssl_ja4h ja4t=$http_ssl_ja4t';
+                            'ja4h=$http_ssl_ja4h ja4t=$http_ssl_ja4t '
+                            'ja4ts=$http_ssl_ja4ts';
 
     server {
         listen 443 ssl;
@@ -73,6 +82,10 @@ http {
         ssl_certificate /path/to/server.crt;
         ssl_certificate_key /path/to/server.key;
         access_log logs/access.log fingerprints;
+
+        location / {
+            proxy_pass http://127.0.0.1:9000; # Your upstream application.
+        }
     }
 }
 ```
@@ -91,13 +104,33 @@ Capture defaults to off because saved SYN packets cost memory. A fingerprint suc
 
 JA4T is empty when nginx is built without `NGX_HAVE_TCP_SAVE_SYN`, capture is off, or no SYN is available (for example with SYN cookies, Unix sockets or QUIC). Behind a TCP proxy, it fingerprints the proxy's connection to nginx.
 
+### JA4TS
+
+JA4TS fingerprints the upstream server's SYN-ACK for proxied HTTP requests. It requires the optional [SYN-ACK capture patch](patches/nginx-tcp-save-synack.patch) and the `ebpf` addon (see [Building with nginx](#building-with-nginx)), but not the SYN capture patch. It needs Linux 6.4+ with kernel BTF and Netfilter BPF support. The nginx master must run as root or with `CAP_BPF`, `CAP_PERFMON` and `CAP_NET_ADMIN`; workers need no extra privileges. Enable capture at `http`, `server` or `location` level:
+
+```nginx
+tcp_save_synack on;
+```
+
+`tcp_save_synack` defaults to `off`. The setting of the location that proxied the request applies, so `tcp_save_synack off;` in a location excludes its requests. Stream proxying is not captured.
+
+`$http_ssl_ja4ts` contains the window size, option kinds, MSS and window scale, such as `64240_2-4-8-1-3_1460_7`, for the final upstream attempt; unlike `$upstream_addr`, it is not a per-attempt list. A reused keepalive connection reports the SYN-ACK of its original handshake. The value is empty when capture is off, the request was not proxied, the connection failed, or no SYN-ACK was captured.
+
+Capture that is enabled but cannot be loaded fails nginx startup. `nginx -t` does not check whether the kernel accepts the BPF programs, and turning capture on in a running instance where it was off everywhere requires a restart rather than a reload.
+
+Known limitations:
+
+- DNAT/SNAT to upstreams on other hosts or in other network namespaces works; an upstream in nginx's own namespace reached through NAT (e.g. `REDIRECT`) is not captured.
+- A SYN-ACK rewritten before netfilter (MSS clamping, XDP or TC programs) is fingerprinted as rewritten; asymmetric rewriting (decapsulation, DSR) prevents capture.
+- Non-root workers are verified on Linux 6.8. On older kernels with `kernel.unprivileged_bpf_disabled` set, workers may be refused map access.
+
 ## Testing
 
 Run both suites from the repository root. The [CI workflows](.github/workflows) show the build and dependency setup.
 
 ### Test::Nginx
 
-The Perl suite (`test/test-nginx/*.t`) checks module loading, variable behavior on plain HTTP, JA4H request fingerprints, TLS ClientHello cases and JA4T SYN fingerprints.
+The Perl suite (`test/test-nginx/*.t`) checks module loading, variable behavior on plain HTTP, JA4H request fingerprints, TLS ClientHello cases and JA4T/JA4TS TCP fingerprints.
 
 Use nginx built with both patches and HTTP/2 support. Install [Test::Nginx](https://github.com/openresty/test-nginx) with `cpanm`, and build [curlu](https://github.com/lynch1981/curlu) with Go 1.24.0 using the curlu version pinned in [CI](.github/workflows/test-nginx.yaml). Its `curl` wrapper must be on `PATH` for the TLS and JA4T cases.
 
@@ -116,6 +149,17 @@ JA4T tests need Linux, root, `ip` and `nft`; they are skipped without root or cu
 ```bash
 sudo -E env PATH="$PATH" PERL5LIB="$PERL5LIB" \
     TEST_NGINX_BINARY="$TEST_NGINX_BINARY" prove -v test/test-nginx/ja4t-variables.t
+```
+
+JA4TS tests (`test/test-nginx/ja4ts-*.t`) need nginx built with the
+[SYN-ACK capture patch](patches/nginx-tcp-save-synack.patch) and the `ebpf`
+addon. `ja4ts-config.t` runs as a normal user; the variable and network
+suites need root:
+
+```bash
+sudo -E env PATH="$PATH" PERL5LIB="$PERL5LIB" \
+    TEST_NGINX_BINARY="$TEST_NGINX_BINARY" \
+    prove -v test/test-nginx/ja4ts-variables.t test/test-nginx/ja4ts-network.t
 ```
 
 ### pytest integration tests
