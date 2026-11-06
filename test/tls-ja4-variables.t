@@ -4,16 +4,19 @@
 # Client: Test::Nginx HTTP/2 curl path. The `curl` on PATH must be
 # curlu's bash curl wrapper (needs --utls-alpn-hex / --utls-alpn-none / --resolve).
 # Requires nginx with http_ssl_module + http_v2_module, and
-# test/test-nginx/certs/server.{crt,key}. TEST 25 also needs --with-debug.
+# test/certs/server.{crt,key}. TEST 25 also needs --with-debug.
 # SNI cases use --resolve so the URL host is example.test (JA4 'd') while
 # TCP stays on 127.0.0.1.
 #
-# Python coverage (test/pytest/test_alpn.py, test/pytest/test_integration.py):
+# Former pytest coverage (test/pytest, now removed):
 #   TESTs 6-7  invalid_cipher_count / scsv_inclusion
 #   TEST 8     ech_alps (HelloChrome_133 analogue of chrome136 goldens)
 #   TESTs 9-14 test_alpn.py encodings 00/hh/60/28/20/2d
 #   TESTs 15-16 SNI d vs IP i (tls13_h2 / no_sni_ip) and TLS 1.2 + h1 (tls12_h11)
-# alpine/curl 30-cipher ClientHellos are not reproducible with curlu parrots.
+#   TESTs 32-33 the other variables of those goldens: JA4H over HTTPS,
+#               JA4L, and empty JA4S/JA4X/JA4T/JA4TS
+# alpine/curl 30-cipher ClientHellos are not reproducible with curlu parrots;
+# tls-ja4-clients.t pins them, and chrome136's, from the real clients.
 #
 # Relocation regressions:
 #   TESTs 17-19 GREASE lookalikes, all 16 GREASE cipher IDs, and duplicates
@@ -27,15 +30,16 @@
 # --utls-version-append).
 # TESTs 27-28 cap extension counts above 99 (curlu --utls-ext-append).
 # TESTs 29-31 put NUL bytes in the first ALPN name.
+# TESTs 32-33 are described above.
 #
 # Run:
 #   export TEST_NGINX_BINARY=/path/to/nginx
 #   export PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}
-#   prove -v test/test-nginx/tls-ja4-variables.t
+#   prove -v test/tls-ja4-variables.t
 
 BEGIN {
     use File::Spec;
-    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/test-nginx/servroot');
+    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/servroot');
     $ENV{TEST_NGINX_USE_HTTP2} = 1;
 }
 
@@ -48,8 +52,8 @@ no_root_location();
 $ENV{TEST_NGINX_SSL_PORT} ||= server_port() + 10;
 server_port_for_client($ENV{TEST_NGINX_SSL_PORT});
 
-my $crt = File::Spec->rel2abs('test/test-nginx/certs/server.crt');
-my $key = File::Spec->rel2abs('test/test-nginx/certs/server.key');
+my $crt = File::Spec->rel2abs('test/certs/server.crt');
+my $key = File::Spec->rel2abs('test/certs/server.key');
 my $ssl_port = $ENV{TEST_NGINX_SSL_PORT};
 
 add_block_preprocessor(sub {
@@ -121,7 +125,7 @@ GET /t
 
 
 === TEST 3: golang_default_ja4
-# HelloGolang is Go 1.24 crypto/tls (curlu pin), ALPN http/1.1 only.
+# HelloGolang is Go 1.24 crypto/tls (curlu pin), ALPN h2, http/1.1.
 # IP and no session cache: 10 extensions (0005,000a,000b,000d,0010,
 # 0012,0017,002b,0033,ff01).
 --- config
@@ -133,7 +137,7 @@ GET /t
 --- request
 GET /t
 --- response_body_like chomp
-^ja4=t13i1310h1_f57a46bbacb6_e7c285222651$
+^ja4=t13i1310h2_f57a46bbacb6_e7c285222651$
 --- no_error_log
 [error]
 
@@ -773,5 +777,62 @@ GET /t
 ^ja4=t13i15[0-9]{2}h2_8daaf6152771_[0-9a-f]{12}
 ja4_string=t13i15[0-9]{2}h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_.*
 ja4one=t13i1514h2_8daaf6152771_36142f6fd6ef$
+--- no_error_log
+[error]
+
+
+
+=== TEST 32: every_variable_over_tls_h2
+# Every module variable in one HTTPS request, like docker/nginx.conf.
+# JA4S and JA4X are not implemented yet and stay empty; JA4L reports no
+# timing and TTL 0, so 0_0_64. JA4T and JA4TS are empty without SYN or
+# SYN-ACK capture. Over HTTP/2 JA4H is ge20 and counts the host header
+# nginx builds from :authority.
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "proto=$server_protocol\nja4=$http_ssl_ja4\nja4one=$http_ssl_ja4one\nja4s=$http_ssl_ja4s\nja4s_string=$http_ssl_ja4s_string\nja4h=$http_ssl_ja4h\nja4h_string=$http_ssl_ja4h_string\nja4t=$http_ssl_ja4t\nja4ts=$http_ssl_ja4ts\nja4x=$http_ssl_ja4x\nja4x_string=$http_ssl_ja4x_string\nja4l=$http_ssl_ja4l\n";
+    }
+--- curl_protocol: https
+--- server_addr_for_client: example.test
+--- curl_options: --utls-hello HelloChrome_133
+--- request
+GET /t
+--- response_body
+proto=HTTP/2.0
+ja4=t13d1516h2_8daaf6152771_d8a2da3f94cd
+ja4one=t13d1514h2_8daaf6152771_1e53c2b25e87
+ja4s=
+ja4s_string=
+ja4h=ge20nn010000_4740ae6347b0_000000000000_000000000000
+ja4h_string=ge20nn010000_host__
+ja4t=
+ja4ts=
+ja4x=
+ja4x_string=
+ja4l=0_0_64
+--- no_error_log
+[error]
+
+
+
+=== TEST 33: ja4h_over_tls_http11
+# JA4H over HTTPS/1.1: ALPN offers only http/1.1. Accept-Language en-US
+# gives enus (as the old curl_cffi chrome136 golden did); Host is counted.
+--- config
+    location /t {
+        default_type text/plain;
+        return 200 "proto=$server_protocol\nja4=$http_ssl_ja4\nja4h=$http_ssl_ja4h\nja4h_string=$http_ssl_ja4h_string\nja4l=$http_ssl_ja4l\n";
+    }
+--- curl_protocol: https
+--- curl_options: --utls-hello HelloFirefox_55 --utls-alpn-hex 687474702f312e31 -H Accept-Language:en-US
+--- request
+GET /t
+--- response_body
+proto=HTTP/1.1
+ja4=t12i1508h1_073e58a039a6_e70312a1ce2c
+ja4h=ge11nn02enus_09e340ee0db0_000000000000_000000000000
+ja4h_string=ge11nn02enus_Host,Accept-Language__
+ja4l=0_0_64
 --- no_error_log
 [error]

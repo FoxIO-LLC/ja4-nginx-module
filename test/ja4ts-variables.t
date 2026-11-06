@@ -11,7 +11,7 @@
 # semantics over loopback IPv4. Directive parsing is in the non-root
 # ja4ts-config.t. Network paths (IPv6, NAT, later rewrites,
 # untracked traffic) are in ja4ts-network.t. Goldens are produced by
-# rewriting the upstream's SYN-ACK with nftables; see test/test-nginx/lib/Ja4tsCapture.pm
+# rewriting the upstream's SYN-ACK with nftables; see test/lib/Ja4tsCapture.pm
 # for the `--- synack` section format.
 #
 # JA4TS here is window_options_mss_wscale only. nginx ACKs the first
@@ -22,7 +22,7 @@
 #   sudo -E env \
 #       PERL5LIB="$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}" \
 #       TEST_NGINX_BINARY=/path/to/nginx \
-#       prove -v test/test-nginx/ja4ts-variables.t
+#       prove -v test/ja4ts-variables.t
 
 use FindBin;
 use lib "$FindBin::Bin/lib";

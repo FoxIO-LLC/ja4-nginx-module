@@ -3,23 +3,24 @@
 #
 # Client: Test::Nginx runs `curl --http3-only -k` for --- http3 blocks, so the
 # `curl` on PATH must support HTTP/3 (`curl -V` lists HTTP3). Requires nginx
-# with http_ssl_module + http_v3_module and test/test-nginx/certs/server.{crt,key}.
+# with http_ssl_module + http_v3_module and test/certs/server.{crt,key}.
 # TEST 4 also needs --with-debug: it counts debug log lines.
 #
-# The ClientHello comes from curl's QUIC stack (ngtcp2 + its TLS library), so
-# exact hashes change with those versions. These cases pin what does not:
+# The ClientHello comes from the client's QUIC stack (quic-go for curlu, which
+# CI uses; ngtcp2 + a TLS library for curl), so exact hashes change with the
+# client and its versions. These cases pin what does not:
 # the QUIC prefix, ALPN h3, quic_transport_parameters (0039), and SNI d
 # versus IP i.
 #
 # Run:
 #   export TEST_NGINX_BINARY=/path/to/nginx
 #   export PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}
-#   PATH=/path/to/curl-with-http3/bin:$PATH prove -v test/test-nginx/http3-ja4-variables.t
+#   PATH=/path/to/curlu:$PATH prove -v test/http3-ja4-variables.t
 
 BEGIN {
     use File::Spec;
     use Test::More;
-    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/test-nginx/servroot');
+    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/servroot');
     plan skip_all => 'curl on PATH has no HTTP/3 support (curl -V lacks HTTP3)'
         unless `curl -V 2>&1` =~ /^Features:.*\bHTTP3\b/m;
 }
@@ -28,8 +29,8 @@ use Test::Nginx::Socket 'no_plan';
 
 no_root_location();
 
-my $crt = File::Spec->rel2abs('test/test-nginx/certs/server.crt');
-my $key = File::Spec->rel2abs('test/test-nginx/certs/server.key');
+my $crt = File::Spec->rel2abs('test/certs/server.crt');
+my $key = File::Spec->rel2abs('test/certs/server.key');
 
 add_block_preprocessor(sub {
     my $block = shift;
@@ -46,7 +47,7 @@ run_tests();
 __DATA__
 
 === TEST 1: http3_request_reports_quic_ja4
-# QUIC is JA4 protocol q. curl's QUIC stack offers only TLS 1.3, and ALPN
+# QUIC is JA4 protocol q. The client's QUIC stack offers only TLS 1.3, and ALPN
 # h3. An IP target sends no SNI (i).
 --- config
     location /t {

@@ -17,7 +17,7 @@
 # The --- synack rules match the upstream's real port before reverse NAT,
 # so the golden is always the fingerprint of the server that answered.
 # `--- prerouting` adds a later rewrite that must not change the captured
-# bytes, and `--- notrack` bypasses conntrack. See test/test-nginx/lib/Ja4tsCapture.pm.
+# bytes, and `--- notrack` bypasses conntrack. See test/lib/Ja4tsCapture.pm.
 #
 # Needs root; everything, including the routes below, lives in this run's
 # private network namespace:
@@ -25,7 +25,7 @@
 #   sudo -E env \
 #       PERL5LIB="$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}" \
 #       TEST_NGINX_BINARY=/path/to/nginx \
-#       prove -v test/test-nginx/ja4ts-network.t
+#       prove -v test/ja4ts-network.t
 
 use FindBin;
 use lib "$FindBin::Bin/lib";

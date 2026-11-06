@@ -29,7 +29,7 @@ package Ja4tsCapture;
 #
 # Usage:
 #
-#   use lib 'test/test-nginx/lib';
+#   use lib 'test/lib';
 #   use Ja4tsCapture;
 #   BEGIN { Ja4tsCapture::enter_namespace() }
 #   use Test::Nginx::Socket 'no_plan';
@@ -82,8 +82,8 @@ sub enter_namespace {
             if $> != 0 || system('nft --version >/dev/null 2>&1') != 0;
     }
 
-    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/test-nginx/servroot');
-    $ENV{TEST_NGINX_CERT_DIR} ||= File::Spec->rel2abs('test/test-nginx/certs');
+    $ENV{TEST_NGINX_SERVROOT} ||= File::Spec->rel2abs('test/servroot');
+    $ENV{TEST_NGINX_CERT_DIR} ||= File::Spec->rel2abs('test/certs');
 
     plan skip_all => "JA4TS requires root (sudo -E env PERL5LIB=... prove -v $0)"
         unless $> == 0;

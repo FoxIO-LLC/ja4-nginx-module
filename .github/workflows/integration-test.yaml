@@ -14,20 +14,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          # Pin curl_cffi: 0.16.3 chrome136 dropped Priority, which breaks
-          # test/pytest/testdata/ech_alps.txt JA4H (14 headers vs 13).
-          pip install pytest 'curl_cffi==0.16.2'
-
       - name: Generate self-signed cert
         run: |
-          mkdir -p nginx_utils
-          mkdir -p nginx_utils/logs
+          mkdir -p docker/logs
           openssl req -x509 -nodes -newkey rsa:2048 \
-            -keyout nginx_utils/server.key \
-            -out nginx_utils/server.crt \
+            -keyout docker/server.key \
+            -out docker/server.crt \
             -days 1 \
             -subj "/CN=localhost"
 
@@ -40,6 +32,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: docker/Dockerfile
           target: final
           tags: ja4-nginx:latest
           load: true
@@ -47,7 +40,8 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Start nginx with Docker Compose
+        working-directory: docker
         run: docker compose up -d
 
-      - name: Run pytest
-        run: pytest
+      - name: Smoke test the image
+        run: docker/smoke-test.sh
