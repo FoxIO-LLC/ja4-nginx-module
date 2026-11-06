@@ -6,15 +6,16 @@
 # with http_ssl_module + http_v3_module and test/certs/server.{crt,key}.
 # TEST 4 also needs --with-debug: it counts debug log lines.
 #
-# The ClientHello comes from curl's QUIC stack (ngtcp2 + its TLS library), so
-# exact hashes change with those versions. These cases pin what does not:
+# The ClientHello comes from the client's QUIC stack (quic-go for curlu, which
+# CI uses; ngtcp2 + a TLS library for curl), so exact hashes change with the
+# client and its versions. These cases pin what does not:
 # the QUIC prefix, ALPN h3, quic_transport_parameters (0039), and SNI d
 # versus IP i.
 #
 # Run:
 #   export TEST_NGINX_BINARY=/path/to/nginx
 #   export PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}
-#   PATH=/path/to/curl-with-http3/bin:$PATH prove -v test/http3-ja4-variables.t
+#   PATH=/path/to/curlu:$PATH prove -v test/http3-ja4-variables.t
 
 BEGIN {
     use File::Spec;
@@ -46,7 +47,7 @@ run_tests();
 __DATA__
 
 === TEST 1: http3_request_reports_quic_ja4
-# QUIC is JA4 protocol q. curl's QUIC stack offers only TLS 1.3, and ALPN
+# QUIC is JA4 protocol q. The client's QUIC stack offers only TLS 1.3, and ALPN
 # h3. An IP target sends no SNI (i).
 --- config
     location /t {

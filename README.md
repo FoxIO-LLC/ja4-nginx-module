@@ -133,7 +133,7 @@ Run the Test::Nginx suite from the repository root. The [CI workflows](.github/w
 
 The Perl suite (`test/*.t`) checks module loading, variable behavior on plain HTTP, JA4H request fingerprints, TLS ClientHello cases and JA4T/JA4TS TCP fingerprints.
 
-Use nginx built with both patches and HTTP/2 support. Install [Test::Nginx](https://github.com/openresty/test-nginx) with `cpanm`, and build [curlu](https://github.com/lynch1981/curlu) with Go 1.24.0 using the curlu version pinned in [CI](.github/workflows/test-nginx.yaml). Its `curl` wrapper must be on `PATH` for the TLS and JA4T cases.
+Use nginx built with both patches and HTTP/2 and HTTP/3 support. Install [Test::Nginx](https://github.com/openresty/test-nginx) with `cpanm`, and build [curlu](https://github.com/lynch1981/curlu) with Go 1.24.0 using the curlu version pinned in [CI](.github/workflows/test-nginx.yaml). Its `curl` wrapper must be on `PATH` for the TLS, HTTP/3 and JA4T cases.
 
 `tls-ja4-clients.t` checks exact fingerprints from real clients and also needs Docker, which runs its clients.
 

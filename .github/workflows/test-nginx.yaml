@@ -24,7 +24,7 @@ jobs:
 
     env:
       NGINX_VERSION: "1.31.4"
-      CURLU_VERSION: "1.5.0"
+      CURLU_VERSION: "1.6.0"
       BUILD_DIR: /tmp/build
       CC: ${{ matrix.cc }}
       ASAN_OPTIONS: detect_leaks=0
@@ -57,17 +57,6 @@ jobs:
             libelf-dev \
             pkg-config
           sudo cpanm --notest Test::Nginx
-
-      # Ubuntu's apt curl lacks HTTP/3; the snap build has it.
-      - name: Install curl with HTTP/3
-        run: |
-          set -euo pipefail
-          sudo snap install curl
-          # Silence the snap sandbox caution curl prints on every run.
-          /snap/bin/curl.snap-acked
-          /snap/bin/curl -V
-          /snap/bin/curl -V | grep -Eq '^Features:.*\bHTTP3\b' \
-            || { echo "::error::snap curl lacks HTTP3"; exit 1; }
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -148,10 +137,10 @@ jobs:
           export TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx"
           prove -v $(ls test/*.t | grep -Ev '/(ja4t|ja4ts|tls-ja4|http3-ja4)-variables\.t$|/ja4ts-network\.t$')
 
-      - name: Run HTTP/3 JA4 tests (snap curl)
+      - name: Run HTTP/3 JA4 tests (curlu)
         run: |
           set -euo pipefail
-          export PATH="/snap/bin:${PATH}"
+          export PATH="${BUILD_DIR}/curlu-${CURLU_VERSION}:${PATH}"
           export TEST_NGINX_BINARY="${BUILD_DIR}/nginx-${NGINX_VERSION}/objs/nginx"
           prove -v test/http3-ja4-variables.t
 
